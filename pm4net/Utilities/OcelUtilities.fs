@@ -2,27 +2,34 @@ namespace pm4net.Utilities
 
 module internal OcelUtitilies =
 
-    /// Get a sequence of objects and their ID's that are referenced in an event and match a given object type
-    let private getMatchingObjects (log: OCEL.Types.OcelLog) (event: OCEL.Types.OcelEvent) o_type =
-        event.OMap
-        |> Seq.map (fun o_id -> o_id, log.Objects[o_id])
-        |> Seq.filter (fun (_, o) -> o.Type = o_type)
-
-    let private getEventsBasedOnObjects (log: OCEL.Types.OcelLog) o_type =
-        log.Events
-        |> Seq.map (fun kv ->
-            match getMatchingObjects log kv.Value o_type |> List.ofSeq with
-            | [] -> []
-            | objs -> objs |> List.map (fun (o_id, _) -> { kv.Value with OMap = [o_id] })
-        )
-        |> Seq.collect id
-
     /// Flatten an OCEL log to a traditional event log by chosing an object type.
-    let flatten (log: OCEL.Types.OcelLog) o_type =
+    let flatten (log: OCEL.Types.OcelLog) object_type =
         if not log.IsValid then
             failwith "Log is not valid."
 
-        if log.ObjectTypes.Contains o_type |> not then
-            failwith $"Object type '{o_type}' is not present in the given log."
+        if log.ObjectTypes.Contains object_type |> not then
+            failwith $"Object type '{object_type}' is not present in the given log."
 
-        getEventsBasedOnObjects log "item"
+        /// Get all events of a log, flattened by the object type.
+        /// If an event has no object of the type, it is excluded. If it has multiple, the event is duplicated.
+        let flattenEventsByObjectType (log: OCEL.Types.OcelLog) object_type =
+            log.Events
+            |> Seq.map (fun kv ->
+                let objs = 
+                    kv.Value.OMap
+                    |> Seq.map (fun o_id -> o_id, log.Objects[o_id])
+                    |> Seq.filter (fun (_, o) -> o.Type = object_type)
+                match objs |> List.ofSeq with
+                | [] -> kv.Key, []
+                | objs -> kv.Key, objs |> List.map (fun (o_id, _) -> { kv.Value with OMap = [o_id] })
+            )
+
+        /// Collect a sequence of event id's and multiple corresponding events into a single mapping of event id's and events, appending a number to the id to make it unique.
+        let collectEventsIntoMapping events =
+            events
+            |> Seq.map (fun (id, events) -> events |> List.mapi (fun i e -> $"{id}-{i+1}", e))
+            |> Seq.collect id
+            |> Map.ofSeq
+
+        // Return the same log, with the events replaced by the flattened events
+        { log with Events = (log, object_type) ||> flattenEventsByObjectType |> collectEventsIntoMapping}
