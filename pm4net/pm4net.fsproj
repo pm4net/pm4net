@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Utilities\OcelUtilities.fs" />
     <Compile Include="Types\ObjectCentricPetriNet.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcPn.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcDfg.fs" />

@@ -7,10 +7,10 @@ module OcPn =
     /// Reference paper: van der Aalst, Wil MP, and Alessandro Berti. "Discovering object-centric Petri nets." Fundamenta informaticae 175.1-4 (2020): 1-40.
     /// Reference implementation: https://github.com/pm4py/pm4py-core/tree/release/pm4py/algo/discovery/ocel/ocpn
     let apply (log: OCEL.Types.OcelLog) : ObjectCentricPetriNet<string> =
-        let flattened_logs = log.ObjectTypes |> Set.map (fun t -> t)
+        let flattened_logs = log.ObjectTypes |> Seq.map (fun t -> pm4net.Utilities.OcelUtitilies.flatten log t)
 
         {
-            Places = Set.empty
+            Places = ([]: seq<string>) |> Set.ofSeq
             Transitions = Set.empty
             Edges = Set.empty
         }
