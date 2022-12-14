@@ -1,10 +1,13 @@
 namespace pm4net.Tests
 
-open System
+open System.IO
 open Xunit
 
 module Tests =
 
     [<Fact>]
-    let ``My test`` () =
-        Assert.True(true)
+    let ``Can discover object-centric Petri Net from sample log`` () =
+        let json = File.ReadAllText("minimal.jsonocel")
+        let log = OCEL.OcelJson.deserialize json
+        let ocpn = pm4py.Algorithms.Discovery.Ocel.OcPn.apply log
+        Assert.NotNull(ocpn)
