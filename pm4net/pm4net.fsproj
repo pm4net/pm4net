@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Types\Graphs.fs" />
     <Compile Include="Types\ProcessTree.fs" />
     <Compile Include="Types\PetriNets.fs" />
     <Compile Include="Utilities\OcelUtilities.fs" />

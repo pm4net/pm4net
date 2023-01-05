@@ -49,7 +49,7 @@ module OcelUtitilies =
 
     /// <summary>
     /// Create a Directly-Follows-Graph (DFG) from traces.
-    /// Based on http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1101.pdf
+    /// Based on <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1101.pdf">A practitioner's guide to process mining: Limitations of the directly-follows graph</see> 
     /// </summary>
     /// <param name="traces">A map of case ID's and their respective events</param>
     /// <param name="tVar"></param>
@@ -57,6 +57,7 @@ module OcelUtitilies =
     /// <param name="tDf"></param>
     /// <returns></returns>
     let directlyFollowsGraph (traces: Map<string, Map<string, OCEL.Types.OcelEvent>>) tVar tAct tDf =
+
         /// Count the number of occurences of an activity in multiple traces
         let noOfEventsWithCase (traces: Map<string, Map<string, OCEL.Types.OcelEvent>>) =
             // For each trace, count the number of distinct activities and accumulate the result into a mapping for all traces
@@ -70,7 +71,7 @@ module OcelUtitilies =
                     | true -> s
                     | false -> s |> Map.add (fst v) 0
                 )
-                // Add the count of distinct activities from thsi trace to the entire count, and return it as the new state
+                // Add the count of distinct activities from this trace to the entire count, and return it as the new state
                 (cnt, actCount) ||> Seq.fold (fun s v ->
                     s |> Map.change (fst v) (fun c ->
                         match c with
@@ -84,12 +85,30 @@ module OcelUtitilies =
         let tFilteredCases = traces |> Map.filter (fun _ v -> v.Count >= tVar)
 
         // Step 3: Remove all events with a frequency lower than tAct
-        let noOfEventsWithCase = noOfEventsWithCase tFilteredCases
-        let tRemovedEvents = tFilteredCases |> Map.map (fun _ v -> v |> Map.filter (fun _ e -> Map.find e.Activity noOfEventsWithCase >= tAct))
+        let noOfEvents = noOfEventsWithCase tFilteredCases
+        let tRemovedEvents = tFilteredCases |> Map.map (fun _ v -> v |> Map.filter (fun _ e -> Map.find e.Activity noOfEvents >= tAct))
 
         // Step 4: Add a node for each activity remaining in the filtered event log
-        // TODO
-        0
+        let nodesWithFrequency = noOfEventsWithCase tRemovedEvents
+
+        // Step 5: Connect the nodes that meet the tDf treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= tDf
+        let edges =
+            (Map.empty<string * string, int>, tRemovedEvents)
+            ||> Map.fold (fun edges _ trace ->
+                // Get pairs of events that directly follow each other
+                let directlyFollowing = trace.Values |> Seq.pairwise
+                // Add or change counter of edge in mapping
+                (edges, directlyFollowing) ||> Seq.fold (fun s v ->
+                    let a, b = (fst v).Activity, (snd v).Activity
+                    match (a, b) |> s.ContainsKey with
+                    | true -> s |> Map.change (a, b) (fun cnt -> match cnt with | Some c -> c + 1 |> Some | None -> None)
+                    | false -> s |> Map.add (a, b) 1
+                )
+            )
+            |> Map.filter (fun _ cnt -> cnt >= tDf)
+
+        // Step 6: Return nodes and edges as a tuple
+        nodesWithFrequency, edges
 
     let relationsFootprint (traces: Map<string, Map<string, OCEL.Types.OcelEvent>>) =
         0

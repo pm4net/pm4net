@@ -11,7 +11,7 @@ module OcelPetriNet =
         let flattenedByTypes = log.ObjectTypes |> Seq.map (fun t -> t, OcelUtitilies.flatten log t) |> Map.ofSeq
         let tracesByTypes = flattenedByTypes |> Map.map (fun _ v -> OcelUtitilies.tracesOfFlattenedLog v)
         let relationsByTypes = tracesByTypes |> Map.map (fun _ v -> OcelUtitilies.relationsFootprint v)
-        let dfgByTypes = tracesByTypes |> Map.map (fun _ v -> OcelUtitilies.directlyFollowsGraph v 1 50 0)
+        let dfgByTypes = tracesByTypes |> Map.map (fun _ v -> OcelUtitilies.directlyFollowsGraph v 5 5 5)
 
         {
             Places = ([]: seq<string>) |> Set.ofSeq
