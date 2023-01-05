@@ -1,0 +1,1043 @@
+{
+  "ocel:global-log": {
+    "ocel:attribute-names": [
+      "pm4net.Level",
+      "pm4net.RawMessage",
+      "pm4net.RenderedMessage",
+      "value"
+    ],
+    "ocel:object-types": [
+      "Incremented",
+      "Now",
+      "StartDate"
+    ]
+  },
+  "ocel:global-event": {
+    "ocel:id": "__INVALID__",
+    "ocel:activity": "__INVALID__",
+    "ocel:timestamp": "__INVALID__",
+    "ocel:omap": [],
+    "ocel:vmap": {}
+  },
+  "ocel:global-object": {
+    "ocel:id": "__INVALID__",
+    "ocel:type": "__INVALID__",
+    "ocel:ovmap": {}
+  },
+  "ocel:events": {
+    "00b21796-58c9-4dd6-b066-b4fc26de2aa0": {
+      "ocel:activity": "Loaded Forecast page",
+      "ocel:timestamp": "2023-01-04T14:06:41.6022488+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Forecast page",
+        "pm4net.RenderedMessage": "Loaded Forecast page"
+      }
+    },
+    "01c1851a-1cb6-487b-86f2-63a0ba34e0e5": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:38.7347597+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "0cab4f94-4375-40cf-9326-ea9deb1a8ebb": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:33.9746066+01:00",
+      "ocel:omap": [
+        "838d20c6-67ff-400d-b51c-b71d70d4aeba",
+        "ed4ec044-aa63-4b01-9c74-0a7670ab71f5"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 11 to 12"
+      }
+    },
+    "159c697c-3cbf-4b50-805a-1f0d804f2a7a": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:32.1505801+01:00",
+      "ocel:omap": [
+        "4ed5b190-9ae3-460b-883b-940341408317",
+        "fcaa00bd-1ba9-478c-91d1-56fa3b602060"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 1 to 2"
+      }
+    },
+    "20efa9cb-b524-49b3-8f36-e9bea1deea92": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:40.121243+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "213a3911-08e6-4706-8346-f72dd3e50d3f": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:34.6232558+01:00",
+      "ocel:omap": [
+        "d982ea08-3c04-47b1-a209-9b443e9a8aa2",
+        "5a4cf68c-42c4-46b5-a726-481b8e22f714"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 15 to 16"
+      }
+    },
+    "2a16c9cc-ab23-4343-a5b4-a31b8f5d739a": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:39.1754066+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "2df735b9-6e2e-475d-9a07-803cc799bf0e": {
+      "ocel:activity": "Loaded Forecast page",
+      "ocel:timestamp": "2023-01-04T14:06:36.6824308+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Forecast page",
+        "pm4net.RenderedMessage": "Loaded Forecast page"
+      }
+    },
+    "312f4ddb-113e-464a-af4e-b7eb463b5809": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:34.3076539+01:00",
+      "ocel:omap": [
+        "bd85635b-dc0f-453a-855a-2ec5ff9c64be",
+        "c3a73408-abe8-4648-ac79-0396688ca8a3"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 13 to 14"
+      }
+    },
+    "31ffc7c1-1e38-4ded-be08-4b2a1aa2c4a6": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:25.1251302+01:00",
+      "ocel:omap": [
+        "b0f94369-c47f-48ec-aa8f-1aa7e90b144c",
+        "2aa47219-4797-47a6-8e87-99df2ae92e52"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 1 to 2"
+      }
+    },
+    "32528bc4-6813-4c00-83ef-3a9c7ffbfbf6": {
+      "ocel:activity": "Loaded Index page",
+      "ocel:timestamp": "2023-01-04T14:06:17.7477044+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Index page",
+        "pm4net.RenderedMessage": "Loaded Index page"
+      }
+    },
+    "348e4e06-2c7b-4542-8780-b64a8118fa83": {
+      "ocel:activity": "Loaded Forecast page",
+      "ocel:timestamp": "2023-01-04T14:06:41.7242718+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Forecast page",
+        "pm4net.RenderedMessage": "Loaded Forecast page"
+      }
+    },
+    "3db18cea-2a58-4ca8-9692-2026be8721aa": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:32.9867907+01:00",
+      "ocel:omap": [
+        "82d337f0-23b7-420b-ba43-29c3dca4b79e",
+        "82509652-1b1d-43cc-838c-2a53770d6134"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 6 to 7"
+      }
+    },
+    "40ade07f-0685-42b0-b8c5-fc243e7e7b5c": {
+      "ocel:activity": "Called GetForecastAsync with {StartDate}",
+      "ocel:timestamp": "2023-01-04T14:06:41.7257072+01:00",
+      "ocel:omap": [
+        "3a093c31-2793-43c3-8ac1-1d1dc555410e"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Called GetForecastAsync with {StartDate}",
+        "pm4net.RenderedMessage": "Called GetForecastAsync with 01/04/2023"
+      }
+    },
+    "43365f41-8a7a-4931-a069-f70762566832": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:32.8297444+01:00",
+      "ocel:omap": [
+        "8c5cbd3a-8703-405a-a885-10e0df082433",
+        "942d410a-2243-4fe3-afd0-b8359ef35fa1"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 5 to 6"
+      }
+    },
+    "469cf3f3-90c2-490e-8b7f-f71933c0d831": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:33.8162692+01:00",
+      "ocel:omap": [
+        "9a7836d7-c88e-4590-a049-62e8141143d1",
+        "b4d2f6e9-2cbd-4cec-b899-bf0622f600a7"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 10 to 11"
+      }
+    },
+    "51657e86-539b-494c-ae03-bbbbdd734c47": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:30.239615+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "52d419a7-d01f-4993-a3cd-ec226c590238": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:33.2445677+01:00",
+      "ocel:omap": [
+        "93a72a59-aa64-459f-8de6-1be6f7c1d607",
+        "5d11771f-4c8d-4db6-9c27-fec8ab31c3aa"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 7 to 8"
+      }
+    },
+    "541b0215-28e4-48ca-a942-0ba799e3eb50": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:25.8196395+01:00",
+      "ocel:omap": [
+        "f9a60075-60a9-462f-b1b5-35f72c2a9a43",
+        "190beb17-6a59-4f12-bafb-97fa03b37dec"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 5 to 6"
+      }
+    },
+    "5fb7dd34-6b88-4a62-9af2-809b1f046026": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:33.4375758+01:00",
+      "ocel:omap": [
+        "88957b6e-48a3-46a8-9603-af2ed6b7039a",
+        "f0b78ec4-6445-4250-8127-7db6bec0dfcb"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 8 to 9"
+      }
+    },
+    "61b61e3a-afa0-444f-8f0d-11a38b2a9680": {
+      "ocel:activity": "Loaded Counter page",
+      "ocel:timestamp": "2023-01-04T14:06:30.2405586+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Counter page",
+        "pm4net.RenderedMessage": "Loaded Counter page"
+      }
+    },
+    "645f8e15-4035-437d-89f4-583c5ca87405": {
+      "ocel:activity": "Called GetForecastAsync with {StartDate}",
+      "ocel:timestamp": "2023-01-04T14:06:26.6282612+01:00",
+      "ocel:omap": [
+        "d91668bf-d05e-4b17-9333-28058bab0f56"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Called GetForecastAsync with {StartDate}",
+        "pm4net.RenderedMessage": "Called GetForecastAsync with 01/04/2023"
+      }
+    },
+    "679cff98-4d50-4f4e-8879-8f47ee43ece4": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:39.7357811+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "6d22852a-2eaf-4973-ba59-45ced7a7a2d9": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:34.9733597+01:00",
+      "ocel:omap": [
+        "7765ee46-8aa7-4f56-a864-1309aaea1e4e",
+        "e552f8f2-b087-40e3-94c0-6c91d743b4e6"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 17 to 18"
+      }
+    },
+    "6d28a179-306d-41b5-8e8a-e77789c1d7d6": {
+      "ocel:activity": "Loaded Index page",
+      "ocel:timestamp": "2023-01-04T14:06:22.2234633+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Index page",
+        "pm4net.RenderedMessage": "Loaded Index page"
+      }
+    },
+    "6e8106f4-9a42-457c-80e2-e7ca13df4d12": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:31.8236562+01:00",
+      "ocel:omap": [
+        "93c110b6-2883-4b61-8089-49f528ee8c64",
+        "541b419f-9091-488c-b4b6-712765ec4e40"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 0 to 1"
+      }
+    },
+    "71776838-dc4a-42e0-8127-47ae97affa6b": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:35.3806085+01:00",
+      "ocel:omap": [
+        "24b8eb03-400e-4e48-8ab8-b2e5821d1c46",
+        "ab183260-914d-4125-9493-4ad404801ed0"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 19 to 20"
+      }
+    },
+    "71a18599-ac28-42a0-8db9-8089c752cb75": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:39.5629474+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "75535f7d-4343-47d0-bf5c-934f71313c85": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:19.9094945+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "79a2a325-5c69-40d9-b9a0-6e7de6484e0d": {
+      "ocel:activity": "Loaded Counter page",
+      "ocel:timestamp": "2023-01-04T14:06:19.913243+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Counter page",
+        "pm4net.RenderedMessage": "Loaded Counter page"
+      }
+    },
+    "7e3a8937-eb8c-433e-b3fc-8b42630051ee": {
+      "ocel:activity": "Called GetForecastAsync with {StartDate}",
+      "ocel:timestamp": "2023-01-04T14:06:36.6836549+01:00",
+      "ocel:omap": [
+        "7105ee6a-b429-4934-a7f5-ab5d1d7731e2"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Called GetForecastAsync with {StartDate}",
+        "pm4net.RenderedMessage": "Called GetForecastAsync with 01/04/2023"
+      }
+    },
+    "86cdd3b8-cbe8-478b-8c02-dfae79a3164a": {
+      "ocel:activity": "Called GetForecastAsync with {StartDate}",
+      "ocel:timestamp": "2023-01-04T14:06:41.6031571+01:00",
+      "ocel:omap": [
+        "804ce212-bb19-4299-8bd3-0d281ee45b71"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Called GetForecastAsync with {StartDate}",
+        "pm4net.RenderedMessage": "Called GetForecastAsync with 01/04/2023"
+      }
+    },
+    "87fbc37f-4a35-477d-bd05-09aa5a8f85f1": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:32.3263814+01:00",
+      "ocel:omap": [
+        "422af742-e374-4cc1-aca8-9c3417353c6c",
+        "8794b9b1-53de-4dc5-b942-d1b7a4035693"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 2 to 3"
+      }
+    },
+    "8876dbcf-baf7-4252-b5ab-c3b4943f0a3b": {
+      "ocel:activity": "Loaded Forecast page",
+      "ocel:timestamp": "2023-01-04T14:06:26.6271617+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Forecast page",
+        "pm4net.RenderedMessage": "Loaded Forecast page"
+      }
+    },
+    "932c3198-ca3c-4e36-82bb-c0a51c7571d2": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:32.5018862+01:00",
+      "ocel:omap": [
+        "b07fd016-8b75-4c35-879a-0ceb72df855f",
+        "44e3e3ec-08cd-4df1-ad96-44c6321e0f77"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 3 to 4"
+      }
+    },
+    "93fb9d05-96c4-41d1-8dfc-c81b094e9872": {
+      "ocel:activity": "Loaded Index page",
+      "ocel:timestamp": "2023-01-04T14:06:17.6047612+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Index page",
+        "pm4net.RenderedMessage": "Loaded Index page"
+      }
+    },
+    "94a93308-6758-4289-a310-91b862ca9067": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:23.2129541+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "9736eba8-af7a-48d2-a3a1-65a009650303": {
+      "ocel:activity": "Loaded Index page",
+      "ocel:timestamp": "2023-01-04T14:06:11.1408301+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Index page",
+        "pm4net.RenderedMessage": "Loaded Index page"
+      }
+    },
+    "97c4072d-3a4d-4411-8b11-956518fdf3a9": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:35.8648447+01:00",
+      "ocel:omap": [
+        "3c81ef85-33c5-43da-a692-e5fc642ec909",
+        "79b1183b-dcda-484c-9fef-0038c67af893"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 20 to 21"
+      }
+    },
+    "9a961078-c8d2-4077-8191-7c7d12361c25": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:25.4725264+01:00",
+      "ocel:omap": [
+        "17810b4a-64e2-4366-be45-c59b4a2459e1",
+        "f397323a-f2ea-4ce7-86cf-aa2852457514"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 3 to 4"
+      }
+    },
+    "a4d11275-1d0b-4c02-b709-70e2e494a92c": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:32.6648311+01:00",
+      "ocel:omap": [
+        "69f928c9-bacd-431f-bf06-49cc495e8c47",
+        "d1c48395-ebb4-4ce0-90ee-5041b2778849"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 4 to 5"
+      }
+    },
+    "a65e4e35-f488-4fd8-9380-cf1304c5c77a": {
+      "ocel:activity": "Loaded Counter page",
+      "ocel:timestamp": "2023-01-04T14:06:23.2140784+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Counter page",
+        "pm4net.RenderedMessage": "Loaded Counter page"
+      }
+    },
+    "b24e4fea-a8a5-4973-94c1-703f6dacdbc0": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:24.6697184+01:00",
+      "ocel:omap": [
+        "98b4a1d6-e46a-4160-8c63-e7256fdd7ead",
+        "a2402407-c35e-4876-8373-6e7036556a92"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 0 to 1"
+      }
+    },
+    "b4f8f725-cf05-44a0-a4d5-65c6e9ea1e2c": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:36.6810998+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "bd229ac8-6140-4b04-8789-3177657cf796": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:26.6242625+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "c5d47cff-cf9f-4e57-824a-ba26ff23c4d0": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:34.4604691+01:00",
+      "ocel:omap": [
+        "a94cc8f1-ac04-46f7-84e4-e8bf5622f686",
+        "41db9512-5a9b-4892-9bf9-b78e21bfa884"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 14 to 15"
+      }
+    },
+    "ced06c22-3cc2-41b0-8834-16711d818806": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:25.9876627+01:00",
+      "ocel:omap": [
+        "4af5e290-9435-4bfe-8f4b-8598737d48fb",
+        "968214fa-3330-4459-bb38-cc3d1dd0742b"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 6 to 7"
+      }
+    },
+    "d6592c48-ca80-43d3-9ff8-14b97d31ff42": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:34.7825284+01:00",
+      "ocel:omap": [
+        "6e9a2e26-1cec-498a-be42-51bf7606da40",
+        "520a7082-8d7e-4f06-b7d8-d2e4d43034d5"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 16 to 17"
+      }
+    },
+    "d6936450-b8df-4954-ae48-4344c7801fa2": {
+      "ocel:activity": "Loaded Index page",
+      "ocel:timestamp": "2023-01-04T14:06:11.985676+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Loaded Index page",
+        "pm4net.RenderedMessage": "Loaded Index page"
+      }
+    },
+    "dc527960-d386-416a-a455-54b2449aab3b": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:25.309611+01:00",
+      "ocel:omap": [
+        "3cf54890-36bf-4227-a07a-23b7bd6cc7ae",
+        "9b6eb34a-cf53-40dd-8882-cdc5755df46c"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 2 to 3"
+      }
+    },
+    "df84c3bd-5aa3-4395-90bb-2743e6d72285": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:22.2225896+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "e22367e5-2339-4a76-85ed-e98249a3572a": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:33.6143524+01:00",
+      "ocel:omap": [
+        "81b949eb-f87a-4e43-9102-68169a4c0e79",
+        "3706b74d-0385-440e-b063-8ad23007212b"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 9 to 10"
+      }
+    },
+    "e821097a-4cb1-41ad-b458-e65675182ae7": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:25.6515089+01:00",
+      "ocel:omap": [
+        "2de4ccc2-e021-4d7a-849a-5be771d5e057",
+        "dd6bd549-63ae-4f3e-b004-4fb5235083c8"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 4 to 5"
+      }
+    },
+    "f3a1fa63-3b8a-4b27-a3ce-c47d46683a6e": {
+      "ocel:activity": "Toggling navigation menu",
+      "ocel:timestamp": "2023-01-04T14:06:39.946959+01:00",
+      "ocel:omap": [],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Toggling navigation menu",
+        "pm4net.RenderedMessage": "Toggling navigation menu"
+      }
+    },
+    "f4bff8c5-c3dd-496b-9620-b55bd78890b3": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:34.1448314+01:00",
+      "ocel:omap": [
+        "c0a08c99-8d03-471c-be43-ea2a23a6bce3",
+        "ce18445f-6268-4792-bf2d-bd354d642fab"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 12 to 13"
+      }
+    },
+    "f6c36094-1318-4878-810f-3b696e00c178": {
+      "ocel:activity": "Incrementing Count from {Now} to {Incremented}",
+      "ocel:timestamp": "2023-01-04T14:06:35.1636759+01:00",
+      "ocel:omap": [
+        "780039e9-6727-45a7-8ff7-c33c8fc78474",
+        "e32918d9-f3c1-4a9a-bf68-57570b9ea7a1"
+      ],
+      "ocel:vmap": {
+        "pm4net.Level": "Information",
+        "pm4net.RawMessage": "Incrementing Count from {Now} to {Incremented}",
+        "pm4net.RenderedMessage": "Incrementing Count from 18 to 19"
+      }
+    }
+  },
+  "ocel:objects": {
+    "17810b4a-64e2-4366-be45-c59b4a2459e1": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 3
+      }
+    },
+    "190beb17-6a59-4f12-bafb-97fa03b37dec": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 6
+      }
+    },
+    "24b8eb03-400e-4e48-8ab8-b2e5821d1c46": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 19
+      }
+    },
+    "2aa47219-4797-47a6-8e87-99df2ae92e52": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 2
+      }
+    },
+    "2de4ccc2-e021-4d7a-849a-5be771d5e057": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 4
+      }
+    },
+    "3706b74d-0385-440e-b063-8ad23007212b": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 10
+      }
+    },
+    "3a093c31-2793-43c3-8ac1-1d1dc555410e": {
+      "ocel:type": "StartDate",
+      "ocel:ovmap": {
+        "value": "04/01/2023"
+      }
+    },
+    "3c81ef85-33c5-43da-a692-e5fc642ec909": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 20
+      }
+    },
+    "3cf54890-36bf-4227-a07a-23b7bd6cc7ae": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 2
+      }
+    },
+    "41db9512-5a9b-4892-9bf9-b78e21bfa884": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 15
+      }
+    },
+    "422af742-e374-4cc1-aca8-9c3417353c6c": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 2
+      }
+    },
+    "44e3e3ec-08cd-4df1-ad96-44c6321e0f77": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 4
+      }
+    },
+    "4af5e290-9435-4bfe-8f4b-8598737d48fb": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 6
+      }
+    },
+    "4ed5b190-9ae3-460b-883b-940341408317": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 1
+      }
+    },
+    "520a7082-8d7e-4f06-b7d8-d2e4d43034d5": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 17
+      }
+    },
+    "541b419f-9091-488c-b4b6-712765ec4e40": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 1
+      }
+    },
+    "5a4cf68c-42c4-46b5-a726-481b8e22f714": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 16
+      }
+    },
+    "5d11771f-4c8d-4db6-9c27-fec8ab31c3aa": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 8
+      }
+    },
+    "69f928c9-bacd-431f-bf06-49cc495e8c47": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 4
+      }
+    },
+    "6e9a2e26-1cec-498a-be42-51bf7606da40": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 16
+      }
+    },
+    "7105ee6a-b429-4934-a7f5-ab5d1d7731e2": {
+      "ocel:type": "StartDate",
+      "ocel:ovmap": {
+        "value": "04/01/2023"
+      }
+    },
+    "7765ee46-8aa7-4f56-a864-1309aaea1e4e": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 17
+      }
+    },
+    "780039e9-6727-45a7-8ff7-c33c8fc78474": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 18
+      }
+    },
+    "79b1183b-dcda-484c-9fef-0038c67af893": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 21
+      }
+    },
+    "804ce212-bb19-4299-8bd3-0d281ee45b71": {
+      "ocel:type": "StartDate",
+      "ocel:ovmap": {
+        "value": "04/01/2023"
+      }
+    },
+    "81b949eb-f87a-4e43-9102-68169a4c0e79": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 9
+      }
+    },
+    "82509652-1b1d-43cc-838c-2a53770d6134": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 7
+      }
+    },
+    "82d337f0-23b7-420b-ba43-29c3dca4b79e": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 6
+      }
+    },
+    "838d20c6-67ff-400d-b51c-b71d70d4aeba": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 11
+      }
+    },
+    "8794b9b1-53de-4dc5-b942-d1b7a4035693": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 3
+      }
+    },
+    "88957b6e-48a3-46a8-9603-af2ed6b7039a": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 8
+      }
+    },
+    "8c5cbd3a-8703-405a-a885-10e0df082433": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 5
+      }
+    },
+    "93a72a59-aa64-459f-8de6-1be6f7c1d607": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 7
+      }
+    },
+    "93c110b6-2883-4b61-8089-49f528ee8c64": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 0
+      }
+    },
+    "942d410a-2243-4fe3-afd0-b8359ef35fa1": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 6
+      }
+    },
+    "968214fa-3330-4459-bb38-cc3d1dd0742b": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 7
+      }
+    },
+    "98b4a1d6-e46a-4160-8c63-e7256fdd7ead": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 0
+      }
+    },
+    "9a7836d7-c88e-4590-a049-62e8141143d1": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 10
+      }
+    },
+    "9b6eb34a-cf53-40dd-8882-cdc5755df46c": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 3
+      }
+    },
+    "a2402407-c35e-4876-8373-6e7036556a92": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 1
+      }
+    },
+    "a94cc8f1-ac04-46f7-84e4-e8bf5622f686": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 14
+      }
+    },
+    "ab183260-914d-4125-9493-4ad404801ed0": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 20
+      }
+    },
+    "b07fd016-8b75-4c35-879a-0ceb72df855f": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 3
+      }
+    },
+    "b0f94369-c47f-48ec-aa8f-1aa7e90b144c": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 1
+      }
+    },
+    "b4d2f6e9-2cbd-4cec-b899-bf0622f600a7": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 11
+      }
+    },
+    "bd85635b-dc0f-453a-855a-2ec5ff9c64be": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 13
+      }
+    },
+    "c0a08c99-8d03-471c-be43-ea2a23a6bce3": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 12
+      }
+    },
+    "c3a73408-abe8-4648-ac79-0396688ca8a3": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 14
+      }
+    },
+    "ce18445f-6268-4792-bf2d-bd354d642fab": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 13
+      }
+    },
+    "d1c48395-ebb4-4ce0-90ee-5041b2778849": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 5
+      }
+    },
+    "d91668bf-d05e-4b17-9333-28058bab0f56": {
+      "ocel:type": "StartDate",
+      "ocel:ovmap": {
+        "value": "04/01/2023"
+      }
+    },
+    "d982ea08-3c04-47b1-a209-9b443e9a8aa2": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 15
+      }
+    },
+    "dd6bd549-63ae-4f3e-b004-4fb5235083c8": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 5
+      }
+    },
+    "e32918d9-f3c1-4a9a-bf68-57570b9ea7a1": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 19
+      }
+    },
+    "e552f8f2-b087-40e3-94c0-6c91d743b4e6": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 18
+      }
+    },
+    "ed4ec044-aa63-4b01-9c74-0a7670ab71f5": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 12
+      }
+    },
+    "f0b78ec4-6445-4250-8127-7db6bec0dfcb": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 9
+      }
+    },
+    "f397323a-f2ea-4ce7-86cf-aa2852457514": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 4
+      }
+    },
+    "f9a60075-60a9-462f-b1b5-35f72c2a9a43": {
+      "ocel:type": "Now",
+      "ocel:ovmap": {
+        "value": 5
+      }
+    },
+    "fcaa00bd-1ba9-478c-91d1-56fa3b602060": {
+      "ocel:type": "Incremented",
+      "ocel:ovmap": {
+        "value": 2
+      }
+    }
+  }
+}

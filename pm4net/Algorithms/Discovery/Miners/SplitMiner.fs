@@ -1,0 +1,3 @@
+// https://www.researchgate.net/publication/325157122_Split_miner_automated_discovery_of_accurate_and_simple_business_process_models_from_event_logs
+module SplitMiner
+

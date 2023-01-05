@@ -6,14 +6,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Types\ObjectCentricPetriNet.fs" />
+    <Compile Include="Types\ProcessTree.fs" />
+    <Compile Include="Types\PetriNets.fs" />
     <Compile Include="Utilities\OcelUtilities.fs" />
+    <Compile Include="Algorithms\Discovery\Miners\SplitMiner.fs" />
+    <Compile Include="Algorithms\Discovery\Miners\InductiveMiner.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelPetriNet.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelDirectlyFollowsGraph.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="OCEL" Version="1.2.0" />
+    <PackageReference Include="OCEL" Version="1.2.2" />
   </ItemGroup>
 
   <ItemGroup>
