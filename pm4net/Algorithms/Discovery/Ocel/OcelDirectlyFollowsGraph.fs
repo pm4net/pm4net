@@ -1,6 +1,7 @@
-namespace pm4py.Algorithms.Discovery.Ocel
+namespace pm4net.Algorithms.Discovery.Ocel
 
 open pm4net.Types
+open pm4net.Utilities
 
 module OcelDirectlyFollowsGraph =
 
@@ -13,7 +14,7 @@ module OcelDirectlyFollowsGraph =
     /// <param name="tAct">Minimal number of global occurences for events to be kept in a trace.</param>
     /// <param name="tDf">Minimal number of direct successions for a relationship to be included in the DFG.</param>
     /// <returns>A Directly-Follows Graph from the traces, with the thresholds applied.</returns>
-    let discover (traces: OCEL.Types.OcelEvent list list) tVar tAct tDf : DirectlyFollowsGraph =
+    let discoverFromTraces (traces: OCEL.Types.OcelEvent list list) tVar tAct tDf : DirectlyFollowsGraph =
 
         /// Count the number of occurences of an activity in multiple traces
         let noOfEventsWithCase (traces: OCEL.Types.OcelEvent list list) =
@@ -66,3 +67,17 @@ module OcelDirectlyFollowsGraph =
 
         // Step 6: Return nodes and edges as a tuple
         { Nodes = nodesWithFrequency; Edges = edges }
+
+    /// <summary>
+    /// Create a Directly-Follows-Graph (DFG) for each object type in a log.
+    /// Based on <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1101.pdf">A practitioner's guide to process mining: Limitations of the directly-follows graph</see> 
+    /// </summary>
+    /// <param name="log">An object-centric event log.</param>
+    /// <param name="tVar">Minimal number of events in a trace for it to be included.</param>
+    /// <param name="tAct">Minimal number of global occurences for events to be kept in a trace.</param>
+    /// <param name="tDf">Minimal number of direct successions for a relationship to be included in the DFG.</param>
+    /// <returns>A map of object types to Directly-Follows Graphs for that type, with the thresholds applied.</returns>
+    let discoverFromLog (log: OCEL.Types.OcelLog) tVar tAct tDf : Map<string, DirectlyFollowsGraph> =
+        let flattenedByTypes = log.ObjectTypes |> Seq.map (fun t -> t, OcelUtitilies.flatten log t) |> Map.ofSeq
+        let orderedTraces = flattenedByTypes |> Map.map (fun _ v -> OcelUtitilies.orderedTracesOfFlattenedLog v)
+        orderedTraces |> Map.map (fun _ v -> discoverFromTraces (v |> HelperFunctions.mapNestedList snd) tVar tAct tDf)

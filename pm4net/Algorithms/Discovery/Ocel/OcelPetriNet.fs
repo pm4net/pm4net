@@ -1,4 +1,4 @@
-namespace pm4py.Algorithms.Discovery.Ocel
+namespace pm4net.Algorithms.Discovery.Ocel
 
 open pm4net.Types
 open pm4net.Utilities
@@ -12,7 +12,7 @@ module OcelPetriNet =
     let discover (log: OCEL.Types.OcelLog) : ObjectCentricPetriNet<string> =
         let flattenedByTypes = log.ObjectTypes |> Seq.map (fun t -> t, OcelUtitilies.flatten log t) |> Map.ofSeq
         let orderedTraces = flattenedByTypes |> Map.map (fun _ v -> OcelUtitilies.orderedTracesOfFlattenedLog v)
-        let dfgByTypes = orderedTraces |> Map.map (fun _ v -> OcelDirectlyFollowsGraph.discover (v |> mapNestedList snd) 0 0 0)
+        let dfgByTypes = orderedTraces |> Map.map (fun _ v -> OcelDirectlyFollowsGraph.discoverFromTraces (v |> mapNestedList snd) 0 0 0)
 
         {
             Places = ([]: seq<string>) |> Set.ofSeq
