@@ -4,12 +4,13 @@ open pm4net.Types
 open DotNetGraph
 open DotNetGraph.Node
 open DotNetGraph.Edge
+open DotNetGraph.Attributes
 open DotNetGraph.Extensions
 
 module Graphviz =
 
     /// Convert a Directly-Follows Graph to a graph in the DOT language
-    let dfg2dot (dfg: DirectlyFollowsGraph) =
+    let dfg2dot (dfg: DirectlyFollowsGraph<string, int>) =
         let graph = DotGraph("DFG", true)
 
         let nodes =
@@ -17,7 +18,9 @@ module Graphviz =
             |> Map.toList
             |> List.map (fun (name, freq) ->
                 let node = DotNode(name)
-                node.Label <- $"{name}{System.Environment.NewLine}{freq}"
+                // Using custom attribute because standard Label always adds quotes, which is not wanted when using HTML labels (https://graphviz.org/doc/info/shapes.html#html)
+                node.SetCustomAttribute("label", $"<<B>{name}</B><BR/>{freq}>") |> ignore
+                node.Shape <- DotNodeShapeAttribute DotNodeShape.Rectangle
                 node
             )
         nodes |> List.iter (fun n -> graph.Elements.Add n)
@@ -31,5 +34,5 @@ module Graphviz =
                 edge
             )
         edges |> List.iter (fun e -> graph.Elements.Add e)
-
+        
         graph.Compile(true)

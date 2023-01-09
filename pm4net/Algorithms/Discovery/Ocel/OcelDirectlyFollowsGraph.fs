@@ -14,7 +14,7 @@ module OcelDirectlyFollowsGraph =
     /// <param name="tAct">Minimal number of global occurences for events to be kept in a trace.</param>
     /// <param name="tDf">Minimal number of direct successions for a relationship to be included in the DFG.</param>
     /// <returns>A Directly-Follows Graph from the traces, with the thresholds applied.</returns>
-    let discoverFromTraces (traces: OCEL.Types.OcelEvent list list) tVar tAct tDf : DirectlyFollowsGraph =
+    let discoverFromTraces (traces: OCEL.Types.OcelEvent list list) tVar tAct tDf : DirectlyFollowsGraph<string, int> =
 
         /// Count the number of occurences of an activity in multiple traces
         let noOfEventsWithCase (traces: OCEL.Types.OcelEvent list list) =
@@ -77,7 +77,7 @@ module OcelDirectlyFollowsGraph =
     /// <param name="tAct">Minimal number of global occurences for events to be kept in a trace.</param>
     /// <param name="tDf">Minimal number of direct successions for a relationship to be included in the DFG.</param>
     /// <returns>A map of object types to Directly-Follows Graphs for that type, with the thresholds applied.</returns>
-    let discoverFromLog (log: OCEL.Types.OcelLog) tVar tAct tDf : Map<string, DirectlyFollowsGraph> =
+    let discoverFromLog (log: OCEL.Types.OcelLog) tVar tAct tDf : Map<string, DirectlyFollowsGraph<string, int>> =
         let flattenedByTypes = log.ObjectTypes |> Seq.map (fun t -> t, OcelUtitilies.flatten log t) |> Map.ofSeq
         let orderedTraces = flattenedByTypes |> Map.map (fun _ v -> OcelUtitilies.orderedTracesOfFlattenedLog v)
         orderedTraces |> Map.map (fun _ v -> discoverFromTraces (v |> HelperFunctions.mapNestedList snd) tVar tAct tDf)
