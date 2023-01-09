@@ -1,3 +1,6 @@
 namespace pm4net.Types
 
-type Graph<'a> = 'a
+type DirectlyFollowsGraph = {
+    Nodes: Map<string, int>
+    Edges: Map<string * string, int>
+}
