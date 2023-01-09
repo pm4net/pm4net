@@ -39,13 +39,13 @@ module OcelUtitilies =
         { log with Events = (log, object_type) ||> flattenEventsByObjectType |> collectEventsIntoMapping}
 
     /// Extract the different traces of a flattened OCEL log, where each event has exactly one object reference.
-    /// Returns a mapping from case identifiers of the object type to a mapping of event ID's and the actual events.
-    let tracesOfFlattenedLog (log: OCEL.Types.OcelLog) =
-        log.Events
-        |> Map.toList
-        |> List.groupBy (fun (_, v) -> v.OMap |> Seq.head)
-        |> List.map (fun (k, v) -> k, Map.ofList v)
-        |> Map.ofList
+    /// Traces are identified by comparing the referenced object by equality, even if they do not have the same ID.
+    /// Returns a list of traces, where each trace is a list of event ID and the actual event.
+    let orderedTracesOfFlattenedLog (log: OCEL.Types.OcelLog) =
+        log.OrderedEvents
+        |> List.ofSeq
+        |> List.groupBy (fun (_, v) -> log.Objects[v.OMap |> Seq.head])
+        |> List.map snd
 
     /// <summary>
     /// Create a Directly-Follows-Graph (DFG) from traces.
@@ -56,15 +56,15 @@ module OcelUtitilies =
     /// <param name="tAct"></param>
     /// <param name="tDf"></param>
     /// <returns></returns>
-    let directlyFollowsGraph (traces: Map<string, Map<string, OCEL.Types.OcelEvent>>) tVar tAct tDf =
+    let directlyFollowsGraph (traces: (string * OCEL.Types.OcelEvent) list list) tVar tAct tDf =
 
         /// Count the number of occurences of an activity in multiple traces
-        let noOfEventsWithCase (traces: Map<string, Map<string, OCEL.Types.OcelEvent>>) =
+        let noOfEventsWithCase (traces: OCEL.Types.OcelEvent list list) =
             // For each trace, count the number of distinct activities and accumulate the result into a mapping for all traces
             (Map.empty<string, int>, traces)
-            ||> Map.fold (fun cnt _ trace ->
+            ||> List.fold (fun cnt trace ->
                 // Count the number of distinct activities in this trace
-                let actCount = trace.Values |> Seq.groupBy (fun e -> e.Activity) |> Seq.map (fun (act, events) -> act, events |> Seq.length)
+                let actCount = trace |> Seq.groupBy (fun e -> e.Activity) |> Seq.map (fun (act, events) -> act, events |> Seq.length)
                 // Add missing keys to the map if encountering activities that were not seen before, and set the initial value to 0
                 let cnt = (cnt, actCount) ||> Seq.fold (fun s v ->
                     match fst v |> s.ContainsKey with
@@ -81,12 +81,15 @@ module OcelUtitilies =
                 )
             )
 
+        // Remove the ID of the event, as it it not relevant here
+        let traces = traces |> List.map (fun trace -> trace |> List.map snd)
+
         // Step 2: Remove all cases from log having a trace with a frequency lower than tVar
-        let tFilteredCases = traces |> Map.filter (fun _ v -> v.Count >= tVar)
+        let tFilteredCases = traces |> List.filter (fun v -> v.Length >= tVar)
 
         // Step 3: Remove all events with a frequency lower than tAct
         let noOfEvents = noOfEventsWithCase tFilteredCases
-        let tRemovedEvents = tFilteredCases |> Map.map (fun _ v -> v |> Map.filter (fun _ e -> Map.find e.Activity noOfEvents >= tAct))
+        let tRemovedEvents = tFilteredCases |> List.map (fun v -> v |> List.filter (fun e -> Map.find e.Activity noOfEvents >= tAct))
 
         // Step 4: Add a node for each activity remaining in the filtered event log
         let nodesWithFrequency = noOfEventsWithCase tRemovedEvents
@@ -94,11 +97,11 @@ module OcelUtitilies =
         // Step 5: Connect the nodes that meet the tDf treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= tDf
         let edges =
             (Map.empty<string * string, int>, tRemovedEvents)
-            ||> Map.fold (fun edges _ trace ->
+            ||> List.fold (fun edges trace ->
                 // Get pairs of events that directly follow each other
-                let directlyFollowing = trace.Values |> Seq.pairwise
+                let directlyFollowing = trace |> List.pairwise
                 // Add or change counter of edge in mapping
-                (edges, directlyFollowing) ||> Seq.fold (fun s v ->
+                (edges, directlyFollowing) ||> List.fold (fun s v ->
                     let a, b = (fst v).Activity, (snd v).Activity
                     match (a, b) |> s.ContainsKey with
                     | true -> s |> Map.change (a, b) (fun cnt -> match cnt with | Some c -> c + 1 |> Some | None -> None)
@@ -109,6 +112,3 @@ module OcelUtitilies =
 
         // Step 6: Return nodes and edges as a tuple
         nodesWithFrequency, edges
-
-    let relationsFootprint (traces: Map<string, Map<string, OCEL.Types.OcelEvent>>) =
-        0
