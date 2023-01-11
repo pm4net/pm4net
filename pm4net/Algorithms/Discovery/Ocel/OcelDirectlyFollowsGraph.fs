@@ -77,7 +77,10 @@ module OcelDirectlyFollowsGraph =
     /// <param name="tAct">Minimal number of global occurences for events to be kept in a trace.</param>
     /// <param name="tDf">Minimal number of direct successions for a relationship to be included in the DFG.</param>
     /// <returns>A map of object types to Directly-Follows Graphs for that type, with the thresholds applied.</returns>
-    let discoverFromLog (log: OCEL.Types.OcelLog) tVar tAct tDf : Map<string, DirectlyFollowsGraph<string, int>> =
+    let discoverFromLog (log: OCEL.Types.OcelLog) tVar tAct tDf removeDuplicates : Map<string, DirectlyFollowsGraph<string, int>> =
+        // Merge possible duplicate objects before continuing, if desired. This might be undesired if the Object ID itself carries important information.
+        let log = if removeDuplicates then log.MergeDuplicateObjects() else log
+
         let flattenedByTypes = log.ObjectTypes |> Seq.map (fun t -> t, OcelUtitilies.flatten log t) |> Map.ofSeq
         let orderedTraces = flattenedByTypes |> Map.map (fun _ v -> OcelUtitilies.orderedTracesOfFlattenedLog v)
         orderedTraces |> Map.map (fun _ v -> discoverFromTraces (v |> HelperFunctions.mapNestedList snd) tVar tAct tDf)

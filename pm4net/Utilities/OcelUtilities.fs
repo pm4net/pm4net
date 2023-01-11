@@ -39,10 +39,10 @@ module OcelUtitilies =
         { log with Events = (log, object_type) ||> flattenEventsByObjectType |> collectEventsIntoMapping}
 
     /// Extract the different traces of a flattened OCEL log, where each event has exactly one object reference.
-    /// Traces are identified by comparing the referenced object by equality, even if they do not have the same ID.
+    /// Traces are identified by comparing the referenced object ID (expects duplicate objects to already be merged).
     /// Returns a list of traces, where each trace is a list of event ID and the actual event.
     let orderedTracesOfFlattenedLog (log: OCEL.Types.OcelLog) =
         log.OrderedEvents
         |> List.ofSeq
-        |> List.groupBy (fun (_, v) -> log.Objects[v.OMap |> Seq.head])
+        |> List.groupBy (fun (_, v) -> v.OMap |> Seq.head)
         |> List.map snd

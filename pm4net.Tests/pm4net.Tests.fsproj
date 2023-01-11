@@ -8,7 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Tests.fs" />
+    <Compile Include="Combined\VisualizationPipelineTests.fs" />
+    <Compile Include="Visualization\GraphvizTests.fs" />
+    <Compile Include="Discovery\OcelDfgTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
