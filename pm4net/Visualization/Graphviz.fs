@@ -10,7 +10,7 @@ open DotNetGraph.Extensions
 module Graphviz =
 
     /// Convert a Directly-Follows Graph to a graph in the DOT language
-    let dfg2dot (dfg: DirectlyFollowsGraph<string, int>) =
+    let dfg2dot (dfg: DirectedGraph<string, int>) =
         let graph = DotGraph("DFG", true)
 
         let nodes =

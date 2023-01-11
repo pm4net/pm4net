@@ -10,7 +10,7 @@ module OcelPetriNet =
     /// Reference paper: van der Aalst, Wil MP, and Alessandro Berti. "Discovering object-centric Petri nets." Fundamenta informaticae 175.1-4 (2020): 1-40.
     /// discoverence implementation: https://github.com/pm4py/pm4py-core/tree/release/pm4py/algo/discovery/ocel/ocpn
     let discover (log: OCEL.Types.OcelLog) : ObjectCentricPetriNet<string> =
-        let dfgByTypes = OcelDirectlyFollowsGraph.discoverFromLog log 0 0 0
+        let dfgByTypes = log |> OcelDirectlyFollowsGraph.discoverFromLog 0 0 0 false []
 
         {
             Places = ([]: seq<string>) |> Set.ofSeq
