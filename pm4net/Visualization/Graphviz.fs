@@ -9,30 +9,45 @@ open DotNetGraph.Extensions
 
 module Graphviz =
 
-    /// Convert a Directly-Follows Graph to a graph in the DOT language
-    let dfg2dot (dfg: DirectedGraph<string, int>) =
+    /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a DOT graph
+    let ocdfg2dot (ocdfg: DirectedGraph<DfgNode, DfgEdge>) =
+
+        let nodeName = function
+            | EventNode n -> n.Name
+            | StartNode n -> $"{nameof(StartNode)} {n}"
+            | EndNode n -> $"{nameof(EndNode)} {n}"
+
         let graph = DotGraph("DFG", true)
 
         let nodes =
-            dfg.Nodes
-            |> Map.toList
-            |> List.map (fun (name, freq) ->
-                let node = DotNode(name)
-                // Using custom attribute because standard Label always adds quotes, which is not wanted when using HTML labels (https://graphviz.org/doc/info/shapes.html#html)
-                node.SetCustomAttribute("label", $"<<B>{name}</B><BR/>{freq}>") |> ignore
-                node.Shape <- DotNodeShapeAttribute DotNodeShape.Rectangle
-                node
+            ocdfg.Nodes
+            |> List.map (fun n ->
+                match n with
+                | EventNode n ->
+                    let node = DotNode(n.Name)
+                    node.SetCustomAttribute("label", $"<<B>{n.Name}</B><BR/>{n.Frequency}>") |> ignore
+                    node.Shape <- DotNodeShapeAttribute DotNodeShape.Rectangle
+                    node
+                | StartNode n ->
+                    let node = DotNode(StartNode n |> nodeName)
+                    node.Label <- n
+                    node.Shape <- DotNodeShapeAttribute DotNodeShape.Ellipse
+                    node
+                | EndNode n ->
+                    let node = DotNode(EndNode n |> nodeName)
+                    node.Label <- n
+                    node.Shape <- DotNodeShapeAttribute DotNodeShape.Underline
+                    node
             )
         nodes |> List.iter (fun n -> graph.Elements.Add n)
 
         let edges =
-            dfg.Edges
-            |> Map.toList
-            |> List.map (fun ((dep, arr), freq) ->
-                let edge = DotEdge(dep, arr)
+            ocdfg.Edges
+            |> List.map (fun (a, b, (name, freq)) ->
+                let edge = DotEdge(nodeName a, nodeName b)
                 edge.Label <- freq.ToString()
                 edge
             )
         edges |> List.iter (fun e -> graph.Elements.Add e)
-        
+
         graph.Compile(true)

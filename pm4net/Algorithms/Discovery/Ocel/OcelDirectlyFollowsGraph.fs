@@ -5,31 +5,6 @@ open pm4net.Utilities
 
 module OcelDirectlyFollowsGraph =
 
-    (* --- TYPE DEFINITIONS --- *)
-
-    type LogLevel =
-        | Verbose
-        | Debug
-        | Information
-        | Warning
-        | Error
-        | Fatal
-
-    type EventNode = {
-        Name: string
-        Frequency: int
-        Level: LogLevel
-    }
-
-    type DfgNode =
-        | StartNode of Type: string
-        | EndNode of Type: string
-        | EventNode of EventNode
-
-    type DfgEdge = string * int
-
-    (* --- FUNCTION DEFINITIONS --- *)
-
     /// <summary>
     /// Create a Directly-Follows-Graph (DFG) from traces.
     /// Based on <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1101.pdf">A practitioner's guide to process mining: Limitations of the directly-follows graph</see> 
@@ -40,7 +15,7 @@ module OcelDirectlyFollowsGraph =
     /// <param name="objType">The name of the object type of this trace. Used to insert start and end node.</param>
     /// <param name="traces">A map of case ID's and their respective events</param>
     /// <returns>A Directly-Follows Graph from the traces, with the thresholds applied.</returns>
-    let discoverFromTraces tVar tAct tDf objType (traces: OCEL.Types.OcelEvent list list) : DiGraph<DfgNode, DfgEdge> =
+    let discoverFromTraces tVar tAct tDf objType (traces: OCEL.Types.OcelEvent list list) : DirectedGraph<DfgNode, DfgEdge> =
 
         /// Count the number of occurences of an activity in multiple traces
         let noOfEventsWithCase (traces: OCEL.Types.OcelEvent list list) =
@@ -112,10 +87,11 @@ module OcelDirectlyFollowsGraph =
         // Find and insert start and stop nodes and their respective edges
         let starts = tracesFilteredForFrequency |> List.map (fun t -> t.Head) |> List.countBy (fun e -> e.Activity)
         let ends = tracesFilteredForFrequency |> List.map (fun t -> t |> List.last) |> List.countBy (fun e -> e.Activity)
-
         let startNode = StartNode(objType)
-        let nodes = startNode :: nodes
+        let endNode = EndNode(objType)
+        let nodes = startNode :: endNode :: nodes
         let edges = edges |> List.append (starts |> List.map (fun (name, count) -> (startNode, nodes |> findNode name, (objType, count))))
+        let edges = edges |> List.append (ends |> List.map (fun (name, count) -> (nodes |> findNode name, endNode, (objType, count))))
 
         // Step 6: Return nodes and edges as a Directed Graph
         { Nodes = nodes; Edges = edges }
@@ -127,20 +103,20 @@ module OcelDirectlyFollowsGraph =
     /// <param name="tVar">Minimal number of events in a trace for it to be included.</param>
     /// <param name="tAct">Minimal number of global occurences for events to be kept in a trace.</param>
     /// <param name="tDf">Minimal number of direct successions for a relationship to be included in the DFG.</param>
-    /// <param name="includeObjectTypes">A list of strings with the object types to include in the DFG.</param>
+    /// <param name="includedObjectTypes">A list of strings with the object types to include in the DFG.</param>
     /// <param name="log">An object-centric event log.</param>
     /// <returns>A map of object types to Directly-Follows Graphs for that type, with the thresholds applied.</returns>
-    let discoverFromLog tVar tAct tDf removeDuplicates includeObjectTypes (log: OCEL.Types.OcelLog) : DiGraph<DfgNode, DfgEdge> =
+    let discoverFromLog tVar tAct tDf removeDuplicates includedObjectTypes (log: OCEL.Types.OcelLog) : DirectedGraph<DfgNode, DfgEdge> =
         // Merge possible duplicate objects before continuing, if desired. This might be undesired if the Object ID itself carries important information.
         let log = if removeDuplicates then log.MergeDuplicateObjects() else log
 
         log.ObjectTypes
-        |> Set.filter (fun t -> includeObjectTypes |> List.contains t) // Only include object types from the list in the parameters
+        |> Set.filter (fun t -> includedObjectTypes |> List.contains t) // Only include object types from the list in the parameters
         |> Seq.map (fun t -> t, OcelUtitilies.flatten log t) // Flatten the log based on every object type
         |> Map.ofSeq // Create a map of object types to flattened log
         |> Map.map (fun _ v -> OcelUtitilies.orderedTracesOfFlattenedLog v) // Extract the individual traces of each object type's flattened log, based on the referenced object
         |> Map.map (fun k v -> discoverFromTraces tVar tAct tDf k (v |> HelperFunctions.mapNestedList snd)) // Discover a DFG for each object type based on the discovered traces
-        |> Map.fold (fun state key value -> // Merge the DFG's for each type together
+        |> Map.fold (fun state _ value -> // Merge the DFG's for each type together
             { state with
                 Nodes =
                     // If there are any duplicate nodes in the new value, choose the one with the maximum frequency (instead of e.g. summing the frequencies)
@@ -148,7 +124,8 @@ module OcelDirectlyFollowsGraph =
                     |> List.groupBy (fun n ->
                         match n with
                         | EventNode n -> n.Name
-                        | StartNode n | EndNode n -> n
+                        | StartNode n -> nameof(StartNode) + n
+                        | EndNode n -> nameof(EndNode) + n
                     )
                     |> List.map (fun (_, nodes) -> nodes |> List.maxBy (fun n ->
                         match n with
