@@ -3,6 +3,7 @@ namespace pm4net.Utilities
 module OcelUtitilies =
 
     /// Flatten an OCEL log to a traditional event log by chosing an object type.
+    /// Reference paper: van der Aalst, Wil MP, and Alessandro Berti. "Discovering object-centric Petri nets." (Definition 4.1)
     let flatten (log: OCEL.Types.OcelLog) object_type =
         if not log.IsValid then
             failwith "Log is not valid."
