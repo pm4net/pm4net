@@ -30,6 +30,6 @@ module VisualizationPipelineTests =
     let ``Can discover DFG from 'blazor-logs' log and generate DOT graph`` () =
         let json = File.ReadAllText("blazor-logs.jsonocel")
         let log = OCEL.OcelJson.deserialize json
-        let dfg = log |> Discovery.Ocel.OcelDirectlyFollowsGraph.discoverFromLog 0 0 0 true ["CorrelationId"]
+        let dfg = log |> Discovery.Ocel.OcelDirectlyFollowsGraph.discoverFromLog 0 0 0 true ["CorrelationId"; "StartDate"]
         let dot = dfg |> Graphviz.ocdfg2dot
         dot |> String.IsNullOrWhiteSpace |> Assert.False

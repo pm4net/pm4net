@@ -9,7 +9,7 @@ type LogLevel =
     | Fatal
     | Unknown
     with
-        member _.FromString = function
+        static member FromString = function
             | "Verbose" | "Trace" -> Verbose
             | "Debug" -> Debug
             | "Information" -> Information

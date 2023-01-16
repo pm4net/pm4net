@@ -1,5 +1,6 @@
 namespace pm4net.Algorithms.Discovery.Ocel
 
+open System
 open pm4net.Types
 open pm4net.Utilities
 
@@ -40,6 +41,19 @@ module OcelDirectlyFollowsGraph =
                 )
             )
 
+        /// Get a string attribute with a name from an event. If it doesn't exist, return an empty string.
+        let getStringAttribute attr (event: OCEL.Types.OcelEvent) =
+            event.VMap
+            |> Map.tryFind attr
+            |> Option.defaultValue (OCEL.Types.OcelString String.Empty)
+            |> fun v -> match v with | OCEL.Types.OcelString ns -> ns | _ -> String.Empty
+        
+        let namespaceAttr event =
+            event |> getStringAttribute "pm4net_Namespace"
+
+        let logLevelAttr event =
+            event |> getStringAttribute "pm4net_Level" |> LogLevel.FromString
+
         // Step 2: Remove all cases from log having a trace with a frequency lower than tVar
         let tracesFilteredForLength = traces |> List.filter (fun v -> v.Length >= tVar)
 
@@ -48,21 +62,29 @@ module OcelDirectlyFollowsGraph =
         let tracesFilteredForFrequency = tracesFilteredForLength |> List.map (fun v -> v |> List.filter (fun e -> Map.find e.Activity noOfEvents >= tAct))
 
         // Step 4: Add a node for each activity remaining in the filtered event log
-        let grouped = traces |> List.collect id |> List.groupBy (fun e -> e.Activity)
+        let grouped = traces |> List.collect id |> List.groupBy (fun e -> e.Activity, namespaceAttr e)
+
         let nodes =
             grouped
-            |> List.map (fun (act, events) ->
+            |> List.map (fun ((act, ns), events) ->
                 EventNode(
                     {
                         Name = act
                         Frequency = events.Length
-                        Level = LogLevel.Information // TODO
+                        Level = events |> OcelUtitilies.mostCommonValue (fun e -> e |> logLevelAttr)
+                        Namespace = ns
                     }
                 )
             )
 
         /// Function to quickly find an event node with a given name
-        let findNode name nodes = nodes |> List.find (fun n -> match n with | EventNode e -> e.Name = name | _ -> false)
+        let findNode name ns nodes =
+            nodes
+            |> List.find (fun n ->
+                match n with
+                | EventNode e -> e.Name = name && e.Namespace = ns
+                | _ -> false
+            )
 
         // Step 5: Connect the nodes that meet the tDf treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= tDf
         let edges =
@@ -72,8 +94,8 @@ module OcelDirectlyFollowsGraph =
                 let directlyFollowing = trace |> List.pairwise
                 // Add or change counter of edge in mapping
                 (edges, directlyFollowing) ||> List.fold (fun s v ->
-                    let aNode = findNode (fst v).Activity nodes
-                    let bNode = findNode (snd v).Activity nodes
+                    let aNode = findNode (fst v).Activity (fst v |> namespaceAttr) nodes
+                    let bNode = findNode (snd v).Activity (snd v |> namespaceAttr) nodes
                     match s |> List.tryFindIndex (fun (a, b, _) -> a = aNode && b = bNode) with
                     | Some i ->
                         let (a, b, (name, freq)) = s[i]
@@ -85,20 +107,21 @@ module OcelDirectlyFollowsGraph =
             |> List.filter (fun (_, _, (_, freq)) -> freq >= tDf)
 
         // Find and insert start and stop nodes and their respective edges
-        let starts = tracesFilteredForFrequency |> List.map (fun t -> t.Head) |> List.countBy (fun e -> e.Activity)
-        let ends = tracesFilteredForFrequency |> List.map (fun t -> t |> List.last) |> List.countBy (fun e -> e.Activity)
+        let starts = tracesFilteredForFrequency |> List.map (fun t -> t.Head) |> List.countBy (fun e -> e.Activity, namespaceAttr e)
+        let ends = tracesFilteredForFrequency |> List.map (fun t -> t |> List.last) |> List.countBy (fun e -> e.Activity, namespaceAttr e)
         let startNode = StartNode(objType)
         let endNode = EndNode(objType)
         let nodes = startNode :: endNode :: nodes
-        let edges = edges |> List.append (starts |> List.map (fun (name, count) -> (startNode, nodes |> findNode name, (objType, count))))
-        let edges = edges |> List.append (ends |> List.map (fun (name, count) -> (nodes |> findNode name, endNode, (objType, count))))
+        let edges = edges |> List.append (starts |> List.map (fun ((name, ns), count) -> (startNode, nodes |> findNode name ns, (objType, count))))
+        let edges = edges |> List.append (ends |> List.map (fun ((name, ns), count) -> (nodes |> findNode name ns, endNode, (objType, count))))
 
         // Step 6: Return nodes and edges as a Directed Graph
         { Nodes = nodes; Edges = edges }
 
     /// <summary>
     /// Create a Directly-Follows-Graph (DFG) for each object type in a log.
-    /// Based on <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1101.pdf">A practitioner's guide to process mining: Limitations of the directly-follows graph</see> 
+    /// Based on <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1101.pdf">A practitioner's guide to process mining: Limitations of the directly-follows graph</see> and
+    /// <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1056.pdf">Object-Centric Process Mining: Dealing with Divergence and Convergence in Event Data.</see>
     /// </summary>
     /// <param name="tVar">Minimal number of events in a trace for it to be included.</param>
     /// <param name="tAct">Minimal number of global occurences for events to be kept in a trace.</param>

@@ -47,3 +47,11 @@ module OcelUtitilies =
         |> List.ofSeq
         |> List.groupBy (fun (_, v) -> v.OMap |> Seq.head)
         |> List.map snd
+
+
+    /// Return the most common value in a list, given some extractor function to extract the property (can just be id)
+    let mostCommonValue extractor list =
+        list
+        |> List.countBy extractor
+        |> List.maxBy snd
+        |> fst

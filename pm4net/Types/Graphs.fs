@@ -9,6 +9,7 @@ type DfgEventNode = {
     Name: string
     Frequency: int
     Level: LogLevel
+    Namespace: string
 }
 
 type DfgNode =
