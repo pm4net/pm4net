@@ -130,16 +130,14 @@ module OcelDfg =
         |> Set.filter (fun t -> includedTypes |> List.contains t) // Only include object types from the list in the parameters
         |> Seq.map (fun t -> t, OcelHelpers.Flatten log t) // Flatten the log based on every object type
         |> Map.ofSeq // Create a map of object types to flattened log
-        |> Map.map (fun k v -> DiscoverForSingleType minEvents minOccurrences minSuccessions k v) // Discover DFG for each type individually
+        |> Map.map (fun objType v -> DiscoverForSingleType minEvents minOccurrences minSuccessions objType v) // Discover DFG for each type individually
         |> Map.fold (fun state _ value -> // Merge the DFG's for each type together
-            // TODO: Rework merge functionality
             { state with
                 Nodes =
-                    // If there are any duplicate nodes in the new value, choose the one with the maximum frequency (instead of e.g. summing the frequencies)
                     List.append state.Nodes value.Nodes
                     |> List.groupBy (fun n ->
                         match n with
-                        | EventNode n -> n.Name
+                        | EventNode n -> nameof(EventNode) + n.Name + n.Namespace + n.Level.ToString()
                         | StartNode n -> nameof(StartNode) + n
                         | EndNode n -> nameof(EndNode) + n
                     )
@@ -148,6 +146,37 @@ module OcelDfg =
                         | EventNode n -> n.Statistics.Frequency
                         | StartNode _ | EndNode _ -> 0 // There should only be one start and end node anyway
                     ))
+
+                    // Need to have an identifier whether the nodes are from the existing state or new value
+                    (*List.append (value.Nodes |> List.map (fun n -> true, n)) (state.Nodes |> List.map (fun n -> false, n))
+                    |> List.groupBy (fun (_, n) ->
+                        match n with
+                        | EventNode n -> nameof(EventNode) + n.Name + n.Namespace + n.Level.ToString()
+                        | StartNode n -> nameof(StartNode) + n
+                        | EndNode n -> nameof(EndNode) + n
+                    )
+                    // Merge duplicate nodes into a single one, only modifying the statistics part as the rest should be the same
+                    |> List.map (fun (_, nodes) ->
+                        nodes |> List.reduce (fun (aNew, a) (bNew, b) ->
+                           match a, b with
+                           | EventNode a, EventNode b ->
+                                true, EventNode({
+                                    a with
+                                        Statistics = {
+                                            a.Statistics with
+                                                Frequencies =
+                                                    match aNew, bNew with
+                                                    | true, true -> a.Statistics.Frequencies |> Map.add objType (b.Statistics.Frequencies[objType])
+                                                    | true, false -> b.Statistics.Frequencies |> Map.add objType (a.Statistics.Frequencies[objType])
+                                                    | false, true -> a.Statistics.Frequencies |> Map.add objType (b.Statistics.Frequencies[objType])
+                                                    | false, false -> a.Statistics.Frequencies
+                                        }
+                                })
+                           | StartNode a, StartNode b -> nodes.Head
+                           | EndNode a, EndNode b -> nodes.Head
+                           | _ -> failwith $"Node A: {a} and B: {b} are not of the same type, but were grouped together anyway." 
+                        ) |> snd
+                    )*)
                 Edges = List.append state.Edges value.Edges
             }
         ) { Nodes = []; Edges = [] } 
