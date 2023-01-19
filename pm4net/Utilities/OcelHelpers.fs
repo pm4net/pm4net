@@ -1,19 +1,23 @@
 namespace pm4net.Utilities
 
-module OcelUtitilies =
+open System
+open OCEL.Types
+open pm4net.Types
+
+module OcelHelpers =
 
     /// Flatten an OCEL log to a traditional event log by chosing an object type.
     /// Reference paper: van der Aalst, Wil MP, and Alessandro Berti. "Discovering object-centric Petri nets." (Definition 4.1)
-    let flatten (log: OCEL.Types.OcelLog) object_type =
+    let Flatten (log: OcelLog) objectType =
         if not log.IsValid then
             failwith "Log is not valid."
 
-        if log.ObjectTypes.Contains object_type |> not then
-            failwith $"Object type '{object_type}' is not present in the given log."
+        if log.ObjectTypes.Contains objectType |> not then
+            failwith $"Object type '{objectType}' is not present in the given log."
 
         /// Get all events of a log, flattened by the object type.
         /// If an event has no object of the type, it is excluded. If it has multiple, the event is duplicated.
-        let flattenEventsByObjectType (log: OCEL.Types.OcelLog) object_type =
+        let flattenEventsByObjectType (log: OcelLog) object_type =
             log.Events
             |> Seq.map (fun kv ->
                 let objs = 
@@ -37,21 +41,31 @@ module OcelUtitilies =
             |> Map.ofSeq
 
         // Return the same log, with the events replaced by the flattened events
-        { log with Events = (log, object_type) ||> flattenEventsByObjectType |> collectEventsIntoMapping}
+        { log with Events = (log, objectType) ||> flattenEventsByObjectType |> collectEventsIntoMapping}
 
     /// Extract the different traces of a flattened OCEL log, where each event has exactly one object reference.
     /// Traces are identified by comparing the referenced object ID (expects duplicate objects to already be merged).
     /// Returns a list of traces, where each trace is a list of event ID and the actual event.
-    let orderedTracesOfFlattenedLog (log: OCEL.Types.OcelLog) =
+    let OrderedTracesOfFlattenedLog (log: OcelLog) =
         log.OrderedEvents
         |> List.ofSeq
         |> List.groupBy (fun (_, v) -> v.OMap |> Seq.head)
         |> List.map snd
 
+    /// Get an attribute from an OCEL event, if it exists.
+    let TryGetAttribute attr event =
+        event.VMap |> Map.tryFind attr
 
-    /// Return the most common value in a list, given some extractor function to extract the property (can just be id)
-    let mostCommonValue extractor list =
-        list
-        |> List.countBy extractor
-        |> List.maxBy snd
-        |> fst
+    /// Get a string attribute from an OCEL event. Returns an empty string if it does not exist.
+    let GetStringAttribute attr event =
+        (attr, event) ||> TryGetAttribute
+        |> Option.defaultValue (OcelString String.Empty)
+        |> fun v -> match v with | OcelString s -> s | _ -> String.Empty
+
+    /// Get the namespace attribute from an OCEL event. Returns an empty string if it does not exist.
+    let GetNamespace event =
+        event |> GetStringAttribute "pm4net_Namespace"
+
+    /// Get the log level attribute from an OCEL event. Returns the Unknown case if it does not exist.
+    let GetLogLevel event =
+        event |> GetStringAttribute "pm4net_Level" |> LogLevel.FromString

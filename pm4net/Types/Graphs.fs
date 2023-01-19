@@ -1,20 +1,42 @@
-namespace pm4net.Types
+namespace pm4net.Types.Dfg
+
+open System
+open pm4net.Types
 
 type DirectedGraph<'Node, 'Edge> when 'Node : comparison = {
     Nodes: 'Node list
     Edges: ('Node * 'Node * 'Edge) list
 }
 
-type DfgEventNode = {
-    Name: string
+type NodeStatistics = {
     Frequency: int
+} with
+    static member Default = {
+        Frequency = 1
+    }
+
+type EdgeStatistics = {
+    Frequency: int
+    Durations: TimeSpan list
+} with
+    static member Default = {
+        Frequency = 1
+        Durations = []
+    }
+
+type EventNode = {
+    Name: string
     Level: LogLevel
     Namespace: string
+    Statistics: NodeStatistics
 }
 
-type DfgNode =
+type Node =
     | StartNode of Type: string
     | EndNode of Type: string
-    | EventNode of DfgEventNode
+    | EventNode of EventNode
 
-type DfgEdge = string * int
+type Edge = {
+    Type: string
+    Statistics: EdgeStatistics
+}
