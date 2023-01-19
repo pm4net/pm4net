@@ -1,4 +1,4 @@
-namespace pm4net.Types
+namespace pm4net.Types.ProcessTree
 
 type ProcessTree<'a> =
     | Activity of 'a

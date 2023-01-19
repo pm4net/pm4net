@@ -10,11 +10,9 @@
     <Compile Include="Types\Graphs.fs" />
     <Compile Include="Types\ProcessTree.fs" />
     <Compile Include="Types\PetriNets.fs" />
-    <Compile Include="Utilities\HelperFunctions.fs" />
-    <Compile Include="Utilities\OcelUtilities.fs" />
-    <Compile Include="Algorithms\Discovery\Miners\SplitMiner.fs" />
-    <Compile Include="Algorithms\Discovery\Miners\InductiveMiner.fs" />
-    <Compile Include="Algorithms\Discovery\Ocel\OcelDirectlyFollowsGraph.fs" />
+    <Compile Include="Utilities\Helpers.fs" />
+    <Compile Include="Utilities\OcelHelpers.fs" />
+    <Compile Include="Algorithms\Discovery\Ocel\OcelDfg.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelPetriNet.fs" />
     <Compile Include="Visualization\Graphviz.fs" />
   </ItemGroup>

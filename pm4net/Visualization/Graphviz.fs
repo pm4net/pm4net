@@ -1,6 +1,7 @@
 namespace pm4net.Visualization
 
 open pm4net.Types
+open pm4net.Types.Dfg
 open DotNetGraph
 open DotNetGraph.Node
 open DotNetGraph.Edge
@@ -11,7 +12,7 @@ open DotNetGraph.Extensions
 module Graphviz =
 
     /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a DOT graph
-    let ocdfg2dot (ocdfg: DirectedGraph<DfgNode, DfgEdge>) =
+    let ocdfg2dot (ocdfg: DirectedGraph<Node, Edge>) =
 
         let nodeName = function
             | EventNode n -> n.Name
@@ -32,7 +33,7 @@ module Graphviz =
                 nodes
                 |> List.map (fun n ->
                     let node = DotNode($"{n.Name}_{ns}")
-                    node.SetCustomAttribute("label", $"<<B>{n.Name}</B><BR/>{n.Frequency}>") |> ignore
+                    node.SetCustomAttribute("label", $"<<B>{n.Name}</B><BR/>{n.Statistics.Frequency}>") |> ignore
                     node.Shape <- DotNodeShapeAttribute DotNodeShape.Rectangle
                     node.Style <- DotNodeStyleAttribute DotNodeStyle.Filled
                     node.FillColor <-
@@ -78,9 +79,9 @@ module Graphviz =
 
         let edges =
             ocdfg.Edges
-            |> List.map (fun (a, b, (name, freq)) ->
+            |> List.map (fun (a, b, e) ->
                 let edge = DotEdge(nodeName a, nodeName b)
-                edge.Label <- freq.ToString()
+                edge.Label <- e.Statistics.Frequency.ToString()
                 edge
             )
         edges |> List.iter (fun e -> graph.Elements.Add e)

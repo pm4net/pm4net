@@ -1,4 +1,4 @@
-namespace pm4net.Types
+namespace pm4net.Types.PetriNets
 
 type ObjectCentricPetriNet<'a when 'a : comparison> = {
     Places: Set<'a>
