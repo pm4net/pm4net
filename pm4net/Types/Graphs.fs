@@ -1,5 +1,6 @@
 namespace pm4net.Types.Dfg
 
+open System
 open pm4net.Types
 
 type DirectedGraph<'Node, 'Edge> when 'Node : comparison = {
@@ -9,11 +10,19 @@ type DirectedGraph<'Node, 'Edge> when 'Node : comparison = {
 
 type NodeStatistics = {
     Frequency: int
-}
+} with
+    static member Default = {
+        Frequency = 1
+    }
 
 type EdgeStatistics = {
     Frequency: int
-}
+    Durations: TimeSpan list
+} with
+    static member Default = {
+        Frequency = 1
+        Durations = []
+    }
 
 type EventNode = {
     Name: string

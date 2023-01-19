@@ -31,12 +31,25 @@ module OcelDfg =
             )
         )
 
+    /// Calcualte the duration between two events
+    let private durationBetweenEvents (e1, e2) =
+        e2.Timestamp - e1.Timestamp
+
     /// Find an event node in a list of nodes by its name and namespace
     let private findNode name ns nodes =
         nodes
         |> List.find (fun n ->
             match n with
             | EventNode e -> e.Name = name && e.Namespace = ns
+            | _ -> false
+        )
+
+    /// Find an edge in a list of edges by its name and namespace of start and end, and the object type
+    let private findEdge (name1, ns1) (name2, ns2) (edges: (Node * Node * Edge) list) =
+        edges
+        |> List.find (fun (a, b, e) ->
+            match a, b with
+            | EventNode a, EventNode b -> a.Name = name1 && a.Namespace = ns1 && b.Name = name2 && b.Namespace = ns2
             | _ -> false
         )
 
@@ -71,7 +84,7 @@ module OcelDfg =
                     Name = act
                     Namespace = ns
                     Level = events |> Helpers.mostCommonValue (fun e -> OcelHelpers.GetLogLevel e)
-                    Statistics = { Frequency = events.Length }
+                    Statistics = { NodeStatistics.Default with Frequency = events.Length }
                 }
             )
         )
@@ -91,9 +104,13 @@ module OcelDfg =
                         let (a, b, edge) = s[i]
                         s |> List.updateAt i (a, b,
                         { edge with
-                            Statistics = { edge.Statistics with Frequency = edge.Statistics.Frequency + 1 }
+                            Statistics = {
+                                edge.Statistics with
+                                    Frequency = edge.Statistics.Frequency + 1
+                                    Durations = durationBetweenEvents v :: edge.Statistics.Durations
+                            }
                         })
-                    | None -> (aNode, bNode, { Type = objectType; Statistics = { Frequency = 1 } }) :: s
+                    | None -> (aNode, bNode, { Type = objectType; Statistics = { EdgeStatistics.Default with Durations = [durationBetweenEvents v] } }) :: s
                 )
             )
             // Filter out edges that do not satisfy minimum threshold
@@ -107,8 +124,8 @@ module OcelDfg =
         let nodes = startNode :: endNode :: nodes
         let edges =
             edges
-            |> List.append (starts |> List.map (fun ((name, ns), count) -> (startNode, nodes |> findNode name ns, { Type = objectType; Statistics = { Frequency = count } }))) // Connect all start nodes
-            |> List.append (ends |> List.map (fun ((name, ns), count) -> (nodes |> findNode name ns, endNode, { Type = objectType; Statistics = { Frequency = count } }))) // Connect all end nodes
+            |> List.append (starts |> List.map (fun ((name, ns), count) -> (startNode, nodes |> findNode name ns, { Type = objectType; Statistics = { EdgeStatistics.Default with Frequency = count } }))) // Connect all start nodes
+            |> List.append (ends |> List.map (fun ((name, ns), count) -> (nodes |> findNode name ns, endNode, { Type = objectType; Statistics = { EdgeStatistics.Default with Frequency = count } }))) // Connect all end nodes
 
         // Return a directed graph with the discovered nodes and edges
         { Nodes = nodes; Edges = edges }
@@ -146,37 +163,6 @@ module OcelDfg =
                         | EventNode n -> n.Statistics.Frequency
                         | StartNode _ | EndNode _ -> 0 // There should only be one start and end node anyway
                     ))
-
-                    // Need to have an identifier whether the nodes are from the existing state or new value
-                    (*List.append (value.Nodes |> List.map (fun n -> true, n)) (state.Nodes |> List.map (fun n -> false, n))
-                    |> List.groupBy (fun (_, n) ->
-                        match n with
-                        | EventNode n -> nameof(EventNode) + n.Name + n.Namespace + n.Level.ToString()
-                        | StartNode n -> nameof(StartNode) + n
-                        | EndNode n -> nameof(EndNode) + n
-                    )
-                    // Merge duplicate nodes into a single one, only modifying the statistics part as the rest should be the same
-                    |> List.map (fun (_, nodes) ->
-                        nodes |> List.reduce (fun (aNew, a) (bNew, b) ->
-                           match a, b with
-                           | EventNode a, EventNode b ->
-                                true, EventNode({
-                                    a with
-                                        Statistics = {
-                                            a.Statistics with
-                                                Frequencies =
-                                                    match aNew, bNew with
-                                                    | true, true -> a.Statistics.Frequencies |> Map.add objType (b.Statistics.Frequencies[objType])
-                                                    | true, false -> b.Statistics.Frequencies |> Map.add objType (a.Statistics.Frequencies[objType])
-                                                    | false, true -> a.Statistics.Frequencies |> Map.add objType (b.Statistics.Frequencies[objType])
-                                                    | false, false -> a.Statistics.Frequencies
-                                        }
-                                })
-                           | StartNode a, StartNode b -> nodes.Head
-                           | EndNode a, EndNode b -> nodes.Head
-                           | _ -> failwith $"Node A: {a} and B: {b} are not of the same type, but were grouped together anyway." 
-                        ) |> snd
-                    )*)
                 Edges = List.append state.Edges value.Edges
             }
         ) { Nodes = []; Edges = [] } 
