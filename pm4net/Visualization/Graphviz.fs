@@ -1,7 +1,9 @@
 namespace pm4net.Visualization
 
+open System
 open pm4net.Types
 open pm4net.Types.Dfg
+open pm4net.Types.Trees
 open DotNetGraph
 open DotNetGraph.Node
 open DotNetGraph.Edge
@@ -10,6 +12,46 @@ open DotNetGraph.Attributes
 open DotNetGraph.Extensions
 
 module Graphviz =
+
+    /// Extract a tree hierarchy from a list of fully qualified namespaces
+    let private namespaceTree separators (namespaces: string list) : ListTree<string> =
+
+        /// Insert a list of sequential values into a tree
+        let rec insert (tree: ListTree<'a>) (values: 'a list) : ListTree<'a> =
+
+            /// Get the node and its index in a list of nodes that has a given value, if any exist.
+            let hasExistingNodeIndex nodes value =
+                match nodes |> List.tryFindIndex (fun (Node(v, _)) -> v = value) with
+                | Some i -> Some (nodes[i], i)
+                | None -> None
+
+            // Only has the Node type, but that has to be deconstructed first
+            match tree with
+            | Node(node, children) ->
+                // Return the input tree if there are no values left to add.
+                // Otherwise recurisvely add each item, stepping one level down into the tree with each value.
+                match values with
+                | [] -> tree
+                | head :: tail ->
+                    // Check whether there is already a child with the given value.
+                    // If yes, discard the duplicate value and continue with the next value on the existing branch.
+                    // If no, add the new value as a child of the current node, with no children of itself, and continue the recursive pattern.
+                    match head |> hasExistingNodeIndex children with
+                    | Some (n, i) ->
+                        let updatedNode = insert n tail
+                        Node(node, children |> List.updateAt i updatedNode)
+                    | None ->
+                        // Create a new child node by recursively adding the remaining values, and then adding it to the existing node.
+                        let newNode = insert (Node(head, [])) tail
+                        Node(node, newNode :: children)
+
+        // Fold over the different namespaces and build up the tree one after another, starting with a root node with an empty string.
+        (Node(String.Empty, []), namespaces)
+        ||> List.fold (fun tree ns ->
+            (ns.Split(separators)
+                |> Array.filter (fun i -> i <> String.Empty)
+                |> List.ofArray)
+            |> insert tree)
 
     /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a DOT graph
     let ocdfg2dot (ocdfg: DirectedGraph<Node, Edge>) =
@@ -20,6 +62,14 @@ module Graphviz =
             | EndNode n -> $"{nameof(EndNode)} {n}"
 
         let graph = DotGraph("DFG", true)
+
+        let namespaces =
+            ocdfg.Nodes
+            |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
+            |> List.map (fun n -> n.Namespace)
+            |> List.distinct
+
+        let namespaceTree = namespaceTree [|'.'|] namespaces
 
         let eventNodesByNameSpace =
             ocdfg.Nodes
