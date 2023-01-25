@@ -14,7 +14,7 @@ open DotNetGraph.Extensions
 module Graphviz =
 
     /// Extract a tree hierarchy from a list of fully qualified namespaces
-    let private namespaceTree separators (namespaces: string list) : ListTree<string> =
+    let private namespaceTree separators (namespaces: string list) =
 
         /// Insert a list of sequential values into a tree
         let rec insert tree values =
@@ -54,7 +54,7 @@ module Graphviz =
             |> insert tree)
 
     // Add empty sub-graphs with the corresponding ID's to each node in a tree
-    let rec private addSubGraphs (tree: ListTree<string>) : ListTree<string * DotSubGraph> =
+    let rec private addSubGraphs (tree: ListTree<string>) =
         match tree with
         | Node(node, children) ->
             // Unique ID to avoid duplicate ID's when single parts of namespaces exist multiple times in different paths
@@ -62,6 +62,48 @@ module Graphviz =
             let subGraph = DotSubGraph($"cluster_{id}")
             subGraph.Label <- node
             Node((node, subGraph), children |> List.map addSubGraphs)
+
+    /// Find a node in a tree given a specific path, ignoring the value of the root node
+    let rec private findNodeWithPath tree path =
+        match tree with
+        | Node(_, children) ->
+            match path with
+            | [] -> match tree with | Node((_, value), _) -> Some value
+            | head :: tail ->
+                match children |> List.tryFind (fun (Node((value, _), _)) -> value = head) with
+                | Some next -> findNodeWithPath next tail
+                | None -> None
+
+    /// Add all subgraphs from a tree to a given DOT graph
+    let rec private addSubgraphsToGraph (tree: ListTree<string * DotSubGraph>) (graph: IDotGraph) : unit =
+        match tree with
+        | Node((_, subGraph), children) ->
+            graph.Elements.Add subGraph
+            children |> List.iter (fun c -> addSubgraphsToGraph c subGraph)
+
+    /// Create a DOT node from en Event node
+    let private createEventNode eventNode =
+        let node = DotNode($"{eventNode.Name}")
+        node.SetCustomAttribute("label", $"<<B>{eventNode.Name}</B><BR/>{eventNode.Statistics.Frequency}>") |> ignore
+        node.Shape <- DotNodeShapeAttribute DotNodeShape.Rectangle
+        node.Style <- DotNodeStyleAttribute DotNodeStyle.Filled
+        node.FillColor <-
+            match eventNode.Level with
+            | Debug | Verbose -> DotFillColorAttribute System.Drawing.Color.White
+            | Information -> DotFillColorAttribute System.Drawing.Color.LightGray
+            | Warning -> DotFillColorAttribute System.Drawing.Color.Orange
+            | Error -> DotFillColorAttribute System.Drawing.Color.Red
+            | Fatal -> DotFillColorAttribute System.Drawing.Color.DarkRed
+            | _ -> DotFillColorAttribute System.Drawing.Color.White
+        node.FontColor <-
+            match eventNode.Level with
+            | Debug | Verbose -> DotFontColorAttribute System.Drawing.Color.Black
+            | Information -> DotFontColorAttribute System.Drawing.Color.Black
+            | Warning -> DotFontColorAttribute System.Drawing.Color.Black
+            | Error -> DotFontColorAttribute System.Drawing.Color.White
+            | Fatal -> DotFontColorAttribute System.Drawing.Color.White
+            | _ -> DotFontColorAttribute System.Drawing.Color.Black
+        node
 
     /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a DOT graph
     let ocdfg2dot (ocdfg: DirectedGraph<Node, Edge>) =
@@ -104,11 +146,23 @@ module Graphviz =
         edges |> List.iter (fun e -> graph.Elements.Add e)
 
         /// Add DOT nodes without any kind of grouping by namespace
-        let addNodesWithoutNamespaces (graph: DotGraph) (ocdfg: DirectedGraph<Node, Edge>) : DotGraph =
+        let addNodesWithoutNamespaces (graph: DotGraph) nodes =
+            nodes
+            |> List.map (fun n -> createEventNode n)
+            |> List.iter (fun n -> graph.Elements.Add n)
             graph
 
         /// Add DOT nodes by grouping nodes into sub-graphs based on their namespace
-        let addNodesWithNamespaces (graph: DotGraph) (ocdfg: DirectedGraph<Node, Edge>) (tree: ListTree<string * DotSubGraph>) : DotGraph =
+        let addNodesWithNamespaces separators (graph: DotGraph) (nodes: EventNode list) (tree: ListTree<string * DotSubGraph>) : DotGraph =
+            nodes
+            |> List.iter (fun n ->
+                let subGraph = n.Namespace.Split(separators) |> List.ofArray |> findNodeWithPath tree
+                match subGraph with
+                | Some subGraph -> createEventNode n |> subGraph.Elements.Add
+                | None -> ()
+            )
+
+            graph |> addSubgraphsToGraph tree
             graph
 
         // Get list of unique fully-qualified namespaces
@@ -119,88 +173,13 @@ module Graphviz =
             |> List.distinct
 
         // Determine whether there is any namespace information, generate the DOT graph, and finally compile it
+        let eventNodes = ocdfg.Nodes |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
+        let separators = [|'.'|]
         match namespaces with
-        | [] | [""] -> addNodesWithoutNamespaces graph ocdfg
+        | [] | [""] -> eventNodes |> addNodesWithoutNamespaces graph
         | _ ->
-            ([|'.'|], namespaces)
+            (separators, namespaces)
             ||> namespaceTree
             |> addSubGraphs
-            |> addNodesWithNamespaces graph ocdfg
+            |> addNodesWithNamespaces separators graph eventNodes
         |> fun g -> g.Compile(true)
-
-
-    let oldcode (ocdfg: DirectedGraph<Node, Edge>) =
-
-        let nodeName = function
-            | EventNode n -> n.Name
-            | StartNode n -> $"{nameof(StartNode)} {n}"
-            | EndNode n -> $"{nameof(EndNode)} {n}"
-
-        let graph = DotGraph("DFG", true)
-
-        let eventNodesByNameSpace =
-            ocdfg.Nodes
-            |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
-            |> List.groupBy (fun n -> n.Namespace)
-
-        let namespaceSubGraphs =
-            eventNodesByNameSpace
-            |> List.mapi (fun i (ns, nodes) ->
-                let subGraph = DotSubGraph($"cluster_{i}")
-                nodes
-                |> List.map (fun n ->
-                    let node = DotNode($"{n.Name}_{ns}")
-                    node.SetCustomAttribute("label", $"<<B>{n.Name}</B><BR/>{n.Statistics.Frequency}>") |> ignore
-                    node.Shape <- DotNodeShapeAttribute DotNodeShape.Rectangle
-                    node.Style <- DotNodeStyleAttribute DotNodeStyle.Filled
-                    node.FillColor <-
-                        match n.Level with
-                        | Debug | Verbose -> DotFillColorAttribute System.Drawing.Color.White
-                        | Information -> DotFillColorAttribute System.Drawing.Color.LightGray
-                        | Warning -> DotFillColorAttribute System.Drawing.Color.Orange
-                        | Error -> DotFillColorAttribute System.Drawing.Color.Red
-                        | Fatal -> DotFillColorAttribute System.Drawing.Color.DarkRed
-                        | _ -> DotFillColorAttribute System.Drawing.Color.White
-                    node.FontColor <-
-                        match n.Level with
-                        | Debug | Verbose -> DotFontColorAttribute System.Drawing.Color.Black
-                        | Information -> DotFontColorAttribute System.Drawing.Color.Black
-                        | Warning -> DotFontColorAttribute System.Drawing.Color.Black
-                        | Error -> DotFontColorAttribute System.Drawing.Color.White
-                        | Fatal -> DotFontColorAttribute System.Drawing.Color.White
-                        | _ -> DotFontColorAttribute System.Drawing.Color.Black
-                    node
-                )
-                |> List.iter (fun n -> subGraph.Elements.Add n)
-                subGraph.Label <- ns
-                subGraph
-            )
-        namespaceSubGraphs |> List.iter (fun n -> graph.Elements.Add n)
-
-        let startEndNodes =
-            ocdfg.Nodes
-            |> List.choose (fun n ->
-                match n with
-                | StartNode n ->
-                    let node = DotNode(StartNode n |> nodeName)
-                    node.Label <- n
-                    node.Shape <- DotNodeShapeAttribute DotNodeShape.Ellipse
-                    Some node
-                | EndNode n ->
-                    let node = DotNode(EndNode n |> nodeName)
-                    node.Label <- n
-                    node.Shape <- DotNodeShapeAttribute DotNodeShape.Underline
-                    Some node
-                | _ -> None)
-        startEndNodes |> List.iter (fun n -> graph.Elements.Add n)
-
-        let edges =
-            ocdfg.Edges
-            |> List.map (fun (a, b, e) ->
-                let edge = DotEdge(nodeName a, nodeName b)
-                edge.Label <- e.Statistics.Frequency.ToString()
-                edge
-            )
-        edges |> List.iter (fun e -> graph.Elements.Add e)
-
-        graph.Compile(true)
