@@ -13,6 +13,7 @@
     <Compile Include="Types\PetriNets.fs" />
     <Compile Include="Utilities\Helpers.fs" />
     <Compile Include="Utilities\OcelHelpers.fs" />
+    <Compile Include="Algorithms\Discovery\Ocel\OcelDfg.fsi" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelDfg.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelPetriNet.fs" />
     <Compile Include="Visualization\Graphviz.fs" />
@@ -20,7 +21,8 @@
 
   <ItemGroup>
     <PackageReference Include="DotNetGraph" Version="2.7.0" />
-    <PackageReference Include="OCEL" Version="1.2.4" />
+    <PackageReference Include="OCEL" Version="1.2.7" />
+    <PackageReference Include="OCEL.CSharp" Version="1.2.7" />
   </ItemGroup>
 
   <ItemGroup>
