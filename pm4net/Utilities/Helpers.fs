@@ -1,6 +1,6 @@
 namespace pm4net.Utilities
 
-module Helpers =
+module internal Helpers =
 
     /// Apply a mapping function to a nested list
     let mapNestedList mapper nestedList =

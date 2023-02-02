@@ -15,7 +15,7 @@ module VisualizationPipelineTests =
         let json = File.ReadAllText("minimal.jsonocel")
         let log = OCEL.OcelJson.deserialize json
         let dfg = Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["customer"; "item"; "order"; "package"; "product"], log)
-        let dot = dfg |> Graphviz.ocdfg2dot
+        let dot = Graphviz.OcDfg2Dot dfg
         dot |> String.IsNullOrWhiteSpace |> Assert.False
 
     [<Fact>]
@@ -23,7 +23,7 @@ module VisualizationPipelineTests =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OCEL.OcelJson.deserialize json
         let dfg = Discovery.Ocel.OcelDfg.Discover(5, 5, 5, ["case:concept:name"], log)
-        let dot = dfg |> Graphviz.ocdfg2dot
+        let dot = Graphviz.OcDfg2Dot dfg
         dot |> String.IsNullOrWhiteSpace |> Assert.False
 
     [<Fact>]
@@ -32,5 +32,5 @@ module VisualizationPipelineTests =
         let log = OCEL.OcelJson.deserialize json
         let log = log.MergeDuplicateObjects()
         let dfg = Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["CorrelationId"; "StartDate"], log)
-        let dot = dfg |> Graphviz.ocdfg2dot
+        let dot = Graphviz.OcDfg2Dot dfg
         dot |> String.IsNullOrWhiteSpace |> Assert.False

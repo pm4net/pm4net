@@ -11,10 +11,11 @@ open DotNetGraph.SubGraph
 open DotNetGraph.Attributes
 open DotNetGraph.Extensions
 
-module Graphviz =
+[<AbstractClass; Sealed>]
+type Graphviz private () =
 
     /// Extract a tree hierarchy from a list of fully qualified namespaces
-    let private namespaceTree separators (namespaces: string list) =
+    static member private namespaceTree separators (namespaces: string list) =
 
         /// Insert a list of sequential values into a tree
         let rec insert tree values =
@@ -54,35 +55,35 @@ module Graphviz =
             |> insert tree)
 
     // Add empty sub-graphs with the corresponding ID's to each node in a tree
-    let rec private addSubGraphs (tree: ListTree<string>) =
+    static member private addSubGraphs (tree: ListTree<string>) =
         match tree with
         | Node(node, children) ->
             // Unique ID to avoid duplicate ID's when single parts of namespaces exist multiple times in different paths
             let id = Guid.NewGuid().ToString("N")
             let subGraph = DotSubGraph($"cluster_{id}")
             subGraph.Label <- node
-            Node((node, subGraph), children |> List.map addSubGraphs)
+            Node((node, subGraph), children |> List.map Graphviz.addSubGraphs)
 
     /// Find a node in a tree given a specific path, ignoring the value of the root node
-    let rec private findNodeWithPath tree path =
+    static member private findNodeWithPath tree path =
         match tree with
         | Node(_, children) ->
             match path with
             | [] -> match tree with | Node((_, value), _) -> Some value
             | head :: tail ->
                 match children |> List.tryFind (fun (Node((value, _), _)) -> value = head) with
-                | Some next -> findNodeWithPath next tail
+                | Some next -> Graphviz.findNodeWithPath next tail
                 | None -> None
 
     /// Add all subgraphs from a tree to a given DOT graph
-    let rec private addSubgraphsToGraph (tree: ListTree<string * DotSubGraph>) (graph: IDotGraph) : unit =
+    static member private addSubgraphsToGraph (tree: ListTree<string * DotSubGraph>) (graph: IDotGraph) : unit =
         match tree with
         | Node((_, subGraph), children) ->
             graph.Elements.Add subGraph
-            children |> List.iter (fun c -> addSubgraphsToGraph c subGraph)
+            children |> List.iter (fun c -> Graphviz.addSubgraphsToGraph c subGraph)
 
     /// Create a DOT node from en Event node
-    let private createEventNode eventNode =
+    static member private createEventNode eventNode =
         let node = DotNode($"{eventNode.Name}")
         node.SetCustomAttribute("label", $"<<B>{eventNode.Name}</B><BR/>{eventNode.Statistics.Frequency}>") |> ignore
         node.Shape <- DotNodeShapeAttribute DotNodeShape.Rectangle
@@ -106,7 +107,7 @@ module Graphviz =
         node
 
     /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a DOT graph
-    let ocdfg2dot (ocdfg: DirectedGraph<Node, Edge>) =
+    static member OcDfg2Dot (ocdfg: DirectedGraph<Node, Edge>) =
 
         /// Get a unique name for a node
         let nodeName = function
@@ -148,7 +149,7 @@ module Graphviz =
         /// Add DOT nodes without any kind of grouping by namespace
         let addNodesWithoutNamespaces (graph: DotGraph) nodes =
             nodes
-            |> List.map (fun n -> createEventNode n)
+            |> List.map (fun n -> Graphviz.createEventNode n)
             |> List.iter (fun n -> graph.Elements.Add n)
             graph
 
@@ -156,13 +157,13 @@ module Graphviz =
         let addNodesWithNamespaces separators (graph: DotGraph) (nodes: EventNode list) (tree: ListTree<string * DotSubGraph>) : DotGraph =
             nodes
             |> List.iter (fun n ->
-                let subGraph = n.Namespace.Split(separators) |> List.ofArray |> findNodeWithPath tree
+                let subGraph = n.Namespace.Split(separators) |> List.ofArray |> Graphviz.findNodeWithPath tree
                 match subGraph with
-                | Some subGraph -> createEventNode n |> subGraph.Elements.Add
+                | Some subGraph -> Graphviz.createEventNode n |> subGraph.Elements.Add
                 | None -> ()
             )
 
-            graph |> addSubgraphsToGraph tree
+            graph |> Graphviz.addSubgraphsToGraph tree
             graph
 
         // Get list of unique fully-qualified namespaces
@@ -179,7 +180,7 @@ module Graphviz =
         | [] | [""] -> eventNodes |> addNodesWithoutNamespaces graph
         | _ ->
             (separators, namespaces)
-            ||> namespaceTree
-            |> addSubGraphs
+            ||> Graphviz.namespaceTree
+            |> Graphviz.addSubGraphs
             |> addNodesWithNamespaces separators graph eventNodes
         |> fun g -> g.Compile(true)

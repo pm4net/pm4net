@@ -4,7 +4,7 @@ open System
 open OCEL.Types
 open pm4net.Types
 
-module OcelHelpers =
+module internal OcelHelpers =
 
     /// Flatten an OCEL log to a traditional event log by chosing an object type.
     /// Reference paper: van der Aalst, Wil MP, and Alessandro Berti. "Discovering object-centric Petri nets." (Definition 4.1)
