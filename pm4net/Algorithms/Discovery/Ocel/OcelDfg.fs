@@ -172,5 +172,5 @@ type OcelDfg private () =
     static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node, Edge> =
         OcelDfg.DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)
 
-    static member Discover(minEvents, minOccurrences, minSuccessions, includedTypes, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node, Edge> =
-        OcelDfg.Discover(minEvents, minOccurrences, minSuccessions, includedTypes, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)
+    static member Discover(minEvents, minOccurrences, minSuccessions, includedTypes : string seq, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node, Edge> =
+        OcelDfg.Discover(minEvents, minOccurrences, minSuccessions, includedTypes |> List.ofSeq, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)
