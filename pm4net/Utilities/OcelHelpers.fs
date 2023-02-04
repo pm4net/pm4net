@@ -74,7 +74,7 @@ type OcelHelpers private () =
         event |> OcelHelpers.GetStringAttribute "pm4net_Level" |> LogLevel.FromString
 
     /// Extract a tree hierarchy from a list of fully qualified namespaces
-    static member NamespaceTree separators (namespaces: string list) =
+    static member NamespaceTree separators (namespaces: string seq) =
 
         /// Insert a list of sequential values into a tree
         let rec insert tree values =
@@ -107,7 +107,7 @@ type OcelHelpers private () =
 
         // Fold over the different namespaces and build up the tree one after another, starting with a root node with an empty string.
         (Node(String.Empty, []), namespaces)
-        ||> List.fold (fun tree ns ->
+        ||> Seq.fold (fun tree ns ->
             (ns.Split(separators)
                 |> Array.filter (fun i -> i <> String.Empty)
                 |> List.ofArray)
