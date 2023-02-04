@@ -3,12 +3,14 @@ namespace pm4net.Utilities
 open System
 open OCEL.Types
 open pm4net.Types
+open pm4net.Types.Trees
 
-module internal OcelHelpers =
+[<AbstractClass; Sealed>]
+type OcelHelpers private () =
 
     /// Flatten an OCEL log to a traditional event log by chosing an object type.
     /// Reference paper: van der Aalst, Wil MP, and Alessandro Berti. "Discovering object-centric Petri nets." (Definition 4.1)
-    let Flatten (log: OcelLog) objectType =
+    static member Flatten (log: OcelLog) objectType =
         if not log.IsValid then
             failwith "Log is not valid."
 
@@ -46,26 +48,67 @@ module internal OcelHelpers =
     /// Extract the different traces of a flattened OCEL log, where each event has exactly one object reference.
     /// Traces are identified by comparing the referenced object ID (expects duplicate objects to already be merged).
     /// Returns a list of traces, where each trace is a list of event ID and the actual event.
-    let OrderedTracesOfFlattenedLog (log: OcelLog) =
+    static member OrderedTracesOfFlattenedLog (log: OcelLog) =
         log.OrderedEvents
         |> List.ofSeq
         |> List.groupBy (fun (_, v) -> v.OMap |> Seq.head)
         |> List.map snd
 
     /// Get an attribute from an OCEL event, if it exists.
-    let TryGetAttribute attr event =
+    static member TryGetAttribute attr event =
         event.VMap |> Map.tryFind attr
 
     /// Get a string attribute from an OCEL event. Returns an empty string if it does not exist.
-    let GetStringAttribute attr event =
-        (attr, event) ||> TryGetAttribute
+    static member GetStringAttribute attr event =
+        (attr, event) ||> OcelHelpers.TryGetAttribute
         |> Option.defaultValue (OcelString String.Empty)
         |> fun v -> match v with | OcelString s -> s | _ -> String.Empty
 
     /// Get the namespace attribute from an OCEL event. Returns an empty string if it does not exist.
-    let GetNamespace event =
-        event |> GetStringAttribute "pm4net_Namespace"
+    static member GetNamespace event =
+        let ns = event |> OcelHelpers.GetStringAttribute "pm4net_Namespace"
+        if ns = String.Empty then event |> OcelHelpers.GetStringAttribute "SourceContext" else ns
 
     /// Get the log level attribute from an OCEL event. Returns the Unknown case if it does not exist.
-    let GetLogLevel event =
-        event |> GetStringAttribute "pm4net_Level" |> LogLevel.FromString
+    static member GetLogLevel event =
+        event |> OcelHelpers.GetStringAttribute "pm4net_Level" |> LogLevel.FromString
+
+    /// Extract a tree hierarchy from a list of fully qualified namespaces
+    static member NamespaceTree separators (namespaces: string list) =
+
+        /// Insert a list of sequential values into a tree
+        let rec insert tree values =
+
+            /// Get the node and its index in a list of nodes that has a given value, if any exist.
+            let hasExistingNodeIndex nodes value =
+                match nodes |> List.tryFindIndex (fun (Node(v, _)) -> v = value) with
+                | Some i -> Some (nodes[i], i)
+                | None -> None
+
+            // Only has the Node type, but that has to be deconstructed first
+            match tree with
+            | Node(node, children) ->
+                // Return the input tree if there are no values left to add.
+                // Otherwise recurisvely add each item, stepping one level down into the tree with each value.
+                match values with
+                | [] -> tree
+                | head :: tail ->
+                    // Check whether there is already a child with the given value.
+                    // If yes, discard the duplicate value and continue with the next value on the existing branch.
+                    // If no, add the new value as a child of the current node, with no children of itself, and continue the recursive pattern.
+                    match head |> hasExistingNodeIndex children with
+                    | Some (n, i) ->
+                        let updatedNode = insert n tail
+                        Node(node, children |> List.updateAt i updatedNode)
+                    | None ->
+                        // Create a new child node by recursively adding the remaining values, and then adding it to the existing node.
+                        let newNode = insert (Node(head, [])) tail
+                        Node(node, newNode :: children)
+
+        // Fold over the different namespaces and build up the tree one after another, starting with a root node with an empty string.
+        (Node(String.Empty, []), namespaces)
+        ||> List.fold (fun tree ns ->
+            (ns.Split(separators)
+                |> Array.filter (fun i -> i <> String.Empty)
+                |> List.ofArray)
+            |> insert tree)

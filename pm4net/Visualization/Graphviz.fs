@@ -10,49 +10,10 @@ open DotNetGraph.Edge
 open DotNetGraph.SubGraph
 open DotNetGraph.Attributes
 open DotNetGraph.Extensions
+open pm4net.Utilities
 
 [<AbstractClass; Sealed>]
 type Graphviz private () =
-
-    /// Extract a tree hierarchy from a list of fully qualified namespaces
-    static member private namespaceTree separators (namespaces: string list) =
-
-        /// Insert a list of sequential values into a tree
-        let rec insert tree values =
-
-            /// Get the node and its index in a list of nodes that has a given value, if any exist.
-            let hasExistingNodeIndex nodes value =
-                match nodes |> List.tryFindIndex (fun (Node(v, _)) -> v = value) with
-                | Some i -> Some (nodes[i], i)
-                | None -> None
-
-            // Only has the Node type, but that has to be deconstructed first
-            match tree with
-            | Node(node, children) ->
-                // Return the input tree if there are no values left to add.
-                // Otherwise recurisvely add each item, stepping one level down into the tree with each value.
-                match values with
-                | [] -> tree
-                | head :: tail ->
-                    // Check whether there is already a child with the given value.
-                    // If yes, discard the duplicate value and continue with the next value on the existing branch.
-                    // If no, add the new value as a child of the current node, with no children of itself, and continue the recursive pattern.
-                    match head |> hasExistingNodeIndex children with
-                    | Some (n, i) ->
-                        let updatedNode = insert n tail
-                        Node(node, children |> List.updateAt i updatedNode)
-                    | None ->
-                        // Create a new child node by recursively adding the remaining values, and then adding it to the existing node.
-                        let newNode = insert (Node(head, [])) tail
-                        Node(node, newNode :: children)
-
-        // Fold over the different namespaces and build up the tree one after another, starting with a root node with an empty string.
-        (Node(String.Empty, []), namespaces)
-        ||> List.fold (fun tree ns ->
-            (ns.Split(separators)
-                |> Array.filter (fun i -> i <> String.Empty)
-                |> List.ofArray)
-            |> insert tree)
 
     // Add empty sub-graphs with the corresponding ID's to each node in a tree
     static member private addSubGraphs (tree: ListTree<string>) =
@@ -180,7 +141,7 @@ type Graphviz private () =
         | [] | [""] -> eventNodes |> addNodesWithoutNamespaces graph
         | _ ->
             (separators, namespaces)
-            ||> Graphviz.namespaceTree
+            ||> OcelHelpers.NamespaceTree
             |> Graphviz.addSubGraphs
             |> addNodesWithNamespaces separators graph eventNodes
         |> fun g -> g.Compile(true)
