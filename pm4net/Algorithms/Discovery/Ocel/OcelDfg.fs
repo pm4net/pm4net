@@ -117,8 +117,8 @@ type OcelDfg private () =
             |> List.filter (fun (_, _, e) -> e.Statistics.Frequency >= minSuccessions)
 
         // Find and insert start and stop nodes and their respective edges
-        let starts = tracesFilteredForFrequency |> List.map (fun t -> t.Head) |> List.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
-        let ends = tracesFilteredForFrequency |> List.map (fun t -> t |> List.last) |> List.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
+        let starts = tracesFilteredForFrequency |> List.filter (fun l -> not l.IsEmpty) |> List.map (fun t -> t.Head) |> List.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
+        let ends = tracesFilteredForFrequency |> List.filter (fun l -> not l.IsEmpty) |> List.map (fun t -> t |> List.last) |> List.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
         let startNode = StartNode(objectType)
         let endNode = EndNode(objectType)
         let nodes = startNode :: endNode :: nodes
