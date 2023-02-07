@@ -68,7 +68,7 @@ type Graphviz private () =
         node
 
     /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a DOT graph
-    static member OcDfg2Dot (ocdfg: DirectedGraph<Node, Edge>) =
+    static member OcDfg2Dot (ocdfg: DirectedGraph<Node, Edge>) (groupByNamespace: bool) =
 
         /// Get a unique name for a node
         let nodeName = function
@@ -79,6 +79,13 @@ type Graphviz private () =
         // Graph that contains all nodes, edges, and subgraphs
         let graph = DotGraph("DFG", true)
 
+        // Assign random colors to each object type to use them for edge colors
+        let typeColors =
+            ocdfg.Nodes
+            |> List.choose (fun n -> match n with | StartNode n -> Some n | _ -> None)
+            |> List.map (fun obj -> obj, Helpers.randomColor())
+            |> Map.ofList
+
         // Create DOT start and end nodes for all types
         let startEndNodes =
             ocdfg.Nodes
@@ -88,11 +95,15 @@ type Graphviz private () =
                     let node = DotNode(StartNode objType |> nodeName)
                     node.Label <- objType
                     node.Shape <- DotNodeShapeAttribute DotNodeShape.Ellipse
+                    node.Style <- DotNodeStyleAttribute DotNodeStyle.Filled
+                    node.FillColor <- DotFillColorAttribute typeColors[objType]
                     Some node
                 | EndNode objType ->
                     let node = DotNode(EndNode objType |> nodeName)
                     node.Label <- objType
                     node.Shape <- DotNodeShapeAttribute DotNodeShape.Underline
+                    node.Style <- DotNodeStyleAttribute DotNodeStyle.Filled
+                    node.FillColor <- DotFillColorAttribute typeColors[objType]
                     Some node
                 | _ -> None)
         startEndNodes |> List.iter (fun n -> graph.Elements.Add n)
@@ -103,6 +114,8 @@ type Graphviz private () =
             |> List.map (fun (a, b, e) ->
                 let edge = DotEdge(nodeName a, nodeName b)
                 edge.Label <- e.Statistics.Frequency.ToString()
+                edge.FontColor <- DotFontColorAttribute typeColors[e.Type]
+                edge.Color <- DotColorAttribute typeColors[e.Type]
                 edge
             )
         edges |> List.iter (fun e -> graph.Elements.Add e)
@@ -137,8 +150,10 @@ type Graphviz private () =
         // Determine whether there is any namespace information, generate the DOT graph, and finally compile it
         let eventNodes = ocdfg.Nodes |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
         let separators = [|'.'|]
-        match namespaces with
-        | [] | [""] -> eventNodes |> addNodesWithoutNamespaces graph
+
+        match namespaces, groupByNamespace with
+        | [], _ | [""], _ | _, false ->
+            eventNodes |> addNodesWithoutNamespaces graph
         | _ ->
             (separators, namespaces)
             ||> OcelHelpers.NamespaceTree

@@ -1,5 +1,8 @@
 namespace pm4net.Utilities
 
+open System
+open System.Drawing
+
 module internal Helpers =
 
     /// Apply a mapping function to a nested list
@@ -12,3 +15,8 @@ module internal Helpers =
         |> List.countBy extractor
         |> List.maxBy snd
         |> fst
+
+    /// Generate a random color
+    let randomColor () =
+        let rnd = new Random()
+        Color.FromArgb(rnd.Next 255, rnd.Next 255, rnd.Next 255)
