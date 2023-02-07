@@ -20,3 +20,10 @@ module internal Helpers =
     let randomColor () =
         let rnd = new Random()
         Color.FromArgb(rnd.Next 255, rnd.Next 255, rnd.Next 255)
+
+    /// Scale a value down to a given range (from https://stackoverflow.com/a/31687097/2102106)
+    let scaleToRange (min: float32) max observedMin observedMax value =
+        if observedMax - observedMin = 0f then
+            1f
+        else
+            (max - min) * (value - observedMin) / (observedMax - observedMin) + min

@@ -86,6 +86,14 @@ type Graphviz private () =
             |> List.map (fun obj -> obj, Helpers.randomColor())
             |> Map.ofList
 
+        /// Find the maximum frequency of edges for all object types
+        let typeMaxFrequencies =
+            ocdfg.Edges
+            |> List.map (fun (_, _, e) -> e)
+            |> List.groupBy (fun e -> e.Type)
+            |> List.map (fun (k, v) -> k, v |> List.maxBy (fun e -> e.Statistics.Frequency) |> fun e -> e.Statistics.Frequency)
+            |> Map.ofList
+
         // Create DOT start and end nodes for all types
         let startEndNodes =
             ocdfg.Nodes
@@ -116,6 +124,8 @@ type Graphviz private () =
                 edge.Label <- e.Statistics.Frequency.ToString()
                 edge.FontColor <- DotFontColorAttribute typeColors[e.Type]
                 edge.Color <- DotColorAttribute typeColors[e.Type]
+                edge.PenWidth <- DotPenWidthAttribute (Helpers.scaleToRange 1f 5f 1f (typeMaxFrequencies[e.Type] |> float32) (e.Statistics.Frequency |> float32))
+                edge.SetCustomAttribute("weight", $"{e.Statistics.Frequency}") |> ignore
                 edge
             )
         edges |> List.iter (fun e -> graph.Elements.Add e)
