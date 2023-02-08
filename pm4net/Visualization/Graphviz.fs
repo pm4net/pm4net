@@ -110,8 +110,8 @@ type Graphviz private () =
                     let node = DotNode(EndNode objType |> nodeName)
                     node.Label <- objType
                     node.Shape <- DotNodeShapeAttribute DotNodeShape.Underline
-                    node.Style <- DotNodeStyleAttribute DotNodeStyle.Filled
-                    node.FillColor <- DotFillColorAttribute typeColors[objType]
+                    node.Color <- DotColorAttribute typeColors[objType]
+                    node.FontColor <- DotFontColorAttribute typeColors[objType]
                     Some node
                 | _ -> None)
         startEndNodes |> List.iter (fun n -> graph.Elements.Add n)
