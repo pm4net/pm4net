@@ -20,8 +20,8 @@
 
   <ItemGroup>
     <PackageReference Include="DotNetGraph" Version="2.7.0" />
-    <PackageReference Include="OCEL" Version="1.2.8" />
-    <PackageReference Include="OCEL.CSharp" Version="1.2.8" />
+    <PackageReference Include="OCEL" Version="1.2.10" />
+    <PackageReference Include="OCEL.CSharp" Version="1.2.10" />
   </ItemGroup>
 
   <ItemGroup>
