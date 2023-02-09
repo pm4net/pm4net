@@ -1,8 +1,7 @@
 namespace pm4net.Tests
 
-open pm4net.Types
 open pm4net.Algorithms
-open pm4net.Visualization
+open pm4net.Visualization.Ocel
 
 open System
 open System.IO

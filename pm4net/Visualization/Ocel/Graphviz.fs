@@ -1,4 +1,4 @@
-namespace pm4net.Visualization
+namespace pm4net.Visualization.Ocel
 
 open System
 open pm4net.Types

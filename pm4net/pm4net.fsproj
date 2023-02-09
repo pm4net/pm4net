@@ -15,7 +15,7 @@
     <Compile Include="Utilities\OcelHelpers.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelDfg.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelPetriNet.fs" />
-    <Compile Include="Visualization\Graphviz.fs" />
+    <Compile Include="Visualization\Ocel\Graphviz.fs" />
   </ItemGroup>
 
   <ItemGroup>
