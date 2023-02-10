@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Compile Include="Combined\VisualizationPipelineTests.fs" />
+    <Compile Include="Visualization\StableGraphLayoutTests.fs" />
     <Compile Include="Visualization\GraphvizTests.fs" />
     <Compile Include="Discovery\OcelDfgTests.fs" />
     <Compile Include="Program.fs" />
