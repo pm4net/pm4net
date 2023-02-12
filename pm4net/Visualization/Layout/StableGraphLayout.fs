@@ -4,13 +4,15 @@ open OCEL.Types
 open pm4net.Types.Dfg
 open pm4net.Utilities
 
-type GlobalRankGraph = DirectedGraph<string * int, int> // Nodes: activity and rank, Edges: frequency
+/// A directed graph that represents the global rank graph. Nodes consist of activity name and rank, and edges store their frequency.
+type GlobalRankGraph = DirectedGraph<string * int, int>
 
 /// Type to represent a sequence of nodes and edges, where an edge consists of two nodes
 type private SequenceElement<'a> =
     | Node of 'a
     | Edge of 'a * 'a
 
+/// Type to represent a variation of a trace, with all its events, a sequence of nodes and edges, and the frequency of the variation
 type private Variation<'a, 'b> = {
     Events: 'a list
     Sequence: (SequenceElement<'a> * 'b) list
@@ -34,7 +36,7 @@ type StableGraphLayout private () =
             let vLenSquared = pown variation.Events.Length 2
             wSquaredSum * vLenSquared
 
-        /// Compute the sequence of a trace (interleaved nodes and edges) (Definition 4.1.2 of Mennes 2018)
+        /// Compute the sequence of a trace, not accounting for the existing global rank graph (interleaved nodes and edges) (Definition 4.1.2 of Mennes 2018)
         let simpleSequence freq trace =
             match trace with
             | [] -> []
@@ -73,27 +75,27 @@ type StableGraphLayout private () =
             // If it does already exist, increment the frequency of the edge elements by the frequency of the new edge sequence.
             let partition =
                 variation.Sequence
-                |> Seq.indexed
-                |> Seq.map (fun (idx, elem) ->
+                |> List.indexed
+                |> List.map (fun (idx, elem) ->
                     match elem with
                     | Node n, _ -> idx, rankGraph.Nodes |> List.exists (fun (act, _) -> act = n)
                     | Edge (a, b), _ -> idx, rankGraph.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
 
             // Build the initial state of the folder by adding the first sequence element when it is new, otherwise an empty list
-            let initialState = if partition |> Seq.head |> snd |> not then variation.Sequence[partition |> Seq.head |> fst] |> Seq.singleton |> Seq.singleton else [[]]
-            (initialState, partition |> Seq.pairwise) ||> Seq.fold (fun state (last, current) ->
+            let initialState = if partition |> List.head |> snd |> not then variation.Sequence[partition |> List.head |> fst] |> List.singleton |> List.singleton else [[]]
+            (initialState, partition |> List.pairwise) ||> List.fold (fun state (last, current) ->
                 // Fold over the list of sequences, and determine whether a new sequence needs to be started based on the info about the last element
                 match last, current with
                 | (_, true), (_, false) ->
                     // Add a new sequence with the only element being the current element
-                    variation.Sequence[fst current] |> Seq.singleton |> Seq.singleton |> Seq.append state
+                    variation.Sequence[fst current] |> List.singleton |> List.singleton |> List.append state
                 | (_, false), (_, false) ->
                     // Append to the last sequence because the last element was new
-                    let lastIdx = Seq.length state - 1
-                    let updatedSeq = variation.Sequence[fst current] |> Seq.singleton |> Seq.append (state |> Seq.last)
-                    state |> Seq.updateAt lastIdx updatedSeq
+                    let lastIdx = List.length state - 1
+                    let updatedSeq = variation.Sequence[fst current] |> List.singleton |> List.append (state |> List.last)
+                    state |> List.updateAt lastIdx updatedSeq
                 | _ -> state
-            ) |> Seq.filter (fun l -> l |> Seq.isEmpty |> not)
+            ) |> List.filter (fun l -> l |> List.isEmpty |> not)
 
         /// Insert a new variation into an existing global rank graph
         let insertSequence rankGraph variation =
@@ -110,7 +112,7 @@ type StableGraphLayout private () =
             let insertNodeToNode rankGraph seq =
                 let (nodes, edges) = seq |> List.partition (fun s -> match s with | Node _, _ -> true | Edge _, _ -> false)
                 // First insert all nodes in the sequence to ensure that they exist before adding edges, which need to know the rank of the connecting nodes
-                // There may be the same node multiple times in the same sequence (not directly after each other). In that case, the later nodes are discarded here (TODO: check what paper is doing)
+                // There may be the same node multiple times in the same sequence (not directly after each other). In that case, the later nodes are discarded here (behaviour not specified in Mannens 2018)
                 let rg =
                     ((rankGraph, rankGraph |> lowestRank), nodes |> List.distinctBy fst) ||> List.fold (fun (graph, nextRank) (node, _) ->
                         { graph with
