@@ -67,52 +67,52 @@ type StableGraphLayout private () =
 
         /// Extract all continuous sequences that only contain nodes and/or edges that are not yet in the rank graph (Mennens 2019, Section 3.1.1)
         /// Uses sequence to efficiently access last element when adding new items to the last sequence.
-        let newSequence (rg: GlobalRankGraph) (var: Variation<string, int>) =
+        let newSequence rankGraph variation =
             // For each sequence element, find out whether it already exists in the global rank graph.
             // If it does not, the element and subsequent elements form a new sequence that will be added to the graph.
             // If it does already exist, increment the frequency of the edge elements by the frequency of the new edge sequence.
             let partition =
-                var.Sequence
+                variation.Sequence
                 |> Seq.indexed
                 |> Seq.map (fun (idx, elem) ->
                     match elem with
-                    | Node n, _ -> idx, rg.Nodes |> List.exists (fun (act, _) -> act = n)
-                    | Edge (a, b), _ -> idx, rg.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
+                    | Node n, _ -> idx, rankGraph.Nodes |> List.exists (fun (act, _) -> act = n)
+                    | Edge (a, b), _ -> idx, rankGraph.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
 
             // Build the initial state of the folder by adding the first sequence element when it is new, otherwise an empty list
-            let initialState = if partition |> Seq.head |> snd |> not then var.Sequence[partition |> Seq.head |> fst] |> Seq.singleton |> Seq.singleton else [[]]
+            let initialState = if partition |> Seq.head |> snd |> not then variation.Sequence[partition |> Seq.head |> fst] |> Seq.singleton |> Seq.singleton else [[]]
             (initialState, partition |> Seq.pairwise) ||> Seq.fold (fun state (last, current) ->
                 // Fold over the list of sequences, and determine whether a new sequence needs to be started based on the info about the last element
                 match last, current with
                 | (_, true), (_, false) ->
                     // Add a new sequence with the only element being the current element
-                    var.Sequence[fst current] |> Seq.singleton |> Seq.singleton |> Seq.append state
+                    variation.Sequence[fst current] |> Seq.singleton |> Seq.singleton |> Seq.append state
                 | (_, false), (_, false) ->
                     // Append to the last sequence because the last element was new
                     let lastIdx = Seq.length state - 1
-                    let updatedSeq = var.Sequence[fst current] |> Seq.singleton |> Seq.append (state |> Seq.last)
+                    let updatedSeq = variation.Sequence[fst current] |> Seq.singleton |> Seq.append (state |> Seq.last)
                     state |> Seq.updateAt lastIdx updatedSeq
                 | _ -> state
             ) |> Seq.filter (fun l -> l |> Seq.isEmpty |> not)
 
         /// Insert a new variation into an existing global rank graph
-        let insertSequence (rg: GlobalRankGraph) (var: Variation<string, int>) : GlobalRankGraph =
+        let insertSequence rankGraph variation =
 
             /// Get the lowest rank encountered so far for any node
-            let lowestRank rg =
-                if rg.Nodes.IsEmpty then 0 else rg.Nodes |> List.minBy snd |> snd
+            let lowestRank rankGraph =
+                if rankGraph.Nodes.IsEmpty then 0 else rankGraph.Nodes |> List.minBy snd |> snd
 
             /// Get the rank of a node with a given name
-            let rankOfNode rg node =
-                rg.Nodes |> List.find (fun n -> fst n = node) |> snd
+            let rankOfNode rankGraph node =
+                rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
 
             /// Insert a Type 1 or 5 sequence into a global rank graph 
-            let insertNodeToNode (rg: GlobalRankGraph) (seq: (SequenceElement<string> * int) list) =
+            let insertNodeToNode rankGraph seq =
                 let (nodes, edges) = seq |> List.partition (fun s -> match s with | Node _, _ -> true | Edge _, _ -> false)
                 // First insert all nodes in the sequence to ensure that they exist before adding edges, which need to know the rank of the connecting nodes
                 // There may be the same node multiple times in the same sequence (not directly after each other). In that case, the later nodes are discarded here (TODO: check what paper is doing)
                 let rg =
-                    ((rg, rg |> lowestRank), nodes |> List.distinctBy fst) ||> List.fold (fun (graph, nextRank) (node, _) ->
+                    ((rankGraph, rankGraph |> lowestRank), nodes |> List.distinctBy fst) ||> List.fold (fun (graph, nextRank) (node, _) ->
                         { graph with
                             Nodes =
                                 match node with
@@ -131,17 +131,17 @@ type StableGraphLayout private () =
                     }
                 )
 
-            let newSeqs = newSequence rg var |> Seq.map List.ofSeq |> List.ofSeq // Get the new sequences that have not been added to the global rank graph yet
+            let newSeqs = newSequence rankGraph variation |> Seq.map List.ofSeq |> List.ofSeq // Get the new sequences that have not been added to the global rank graph yet
             // TODO: Also find the sequence elements that do already exist, in order to increase their frequency with the current variation's frequency
-            (rg, newSeqs) ||> Seq.fold (fun graph newSeq ->
+            (rankGraph, newSeqs) ||> Seq.fold (fun graph newSeq ->
                 match newSeq with
-                | [Node _, _] -> insertNodeToNode rg newSeq // Type 1
+                | [Node _, _] -> insertNodeToNode rankGraph newSeq // Type 1
                 | [Edge _, _] -> graph // Type 2
                 | _ ->
                     match newSeq, newSeq |> List.rev |> List.head with
                     | (Node _, _) :: _, (Edge _, _) -> graph // Type 3
                     | (Edge _, _) :: _, (Node _, _) -> graph // Type 4
-                    | (Node _, _) :: _, (Node _, _) -> insertNodeToNode rg newSeq // Type 5
+                    | (Node _, _) :: _, (Node _, _) -> insertNodeToNode rankGraph newSeq // Type 5
                     | (Edge _, _) :: _, (Edge _, _) -> graph // Type 6
                     | _ -> graph
             )
