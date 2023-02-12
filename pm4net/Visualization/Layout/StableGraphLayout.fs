@@ -66,30 +66,33 @@ type StableGraphLayout private () =
             |> List.sortByDescending importanceSort // Importance-sort the variants so that the most important/frequent variants come first
 
         /// Extract all continuous sequences that only contain nodes and/or edges that are not yet in the rank graph (Mennens 2019, Section 3.1.1)
+        /// Uses sequence to efficiently access last element when adding new items to the last sequence.
         let newSequence (rg: GlobalRankGraph) (var: Variation<string>) =
             // For each sequence element, find out whether it already exists in the global rank graph.
             // If it does not, the element and subsequent elements form a new sequence that will be added to the graph.
             // If it does already exist, increment the frequency of the edge elements by the frequency of the new edge sequence.
             let partition =
                 var.Sequence
-                |> List.indexed
-                |> List.map (fun (idx, elem) ->
+                |> Seq.indexed
+                |> Seq.map (fun (idx, elem) ->
                     match elem with
                     | Node n -> idx, rg.Nodes |> List.exists (fun (act, _) -> act = n)
                     | Edge (a, b) -> idx, rg.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
 
             // Build the initial state of the folder by adding the first sequence element when it is new, otherwise an empty list
-            let initialState = if snd partition.Head |> not then [[var.Sequence[fst partition.Head]]] else [[]]
-            (initialState, partition |> List.tail |> List.pairwise) ||> List.fold (fun state (last, current) ->
-                // Fold over the list, and determine whether a new sequence needs to be started based on the info about the last element
-                // The first element in the partition is skipped as it was already looked at when building the initial state
+            let initialState = if partition |> Seq.head |> snd |> not then var.Sequence[partition |> Seq.head |> fst] |> Seq.singleton |> Seq.singleton else [[]]
+            (initialState, partition |> Seq.pairwise) ||> Seq.fold (fun state (last, current) ->
+                // Fold over the list of sequences, and determine whether a new sequence needs to be started based on the info about the last element
                 match last with
-                | (idx, true) -> state @ List.singleton [var.Sequence[idx]] // Start a new sequence because the last element was not new
-                | (idx, false) -> // Append to the last sequence because the last element was new
-                    let rev = state |> List.rev
-                    let rev = rev |> List.updateAt 0 (rev.Head @ List.singleton var.Sequence[idx])
-                    rev |> List.rev
-            ) |> List.filter (fun l -> not l.IsEmpty)
+                | (_, true) ->
+                    // Add a new sequence with the only element being the current element
+                    var.Sequence[fst current] |> Seq.singleton |> Seq.singleton |> Seq.append state
+                | (_, false) ->
+                    // Append to the last sequence because the last element was new
+                    let lastIdx = Seq.length state - 1
+                    let updatedSeq = var.Sequence[fst current] |> Seq.singleton |> Seq.append (state |> Seq.last)
+                    state |> Seq.updateAt lastIdx updatedSeq
+            ) |> Seq.filter (fun l -> l |> Seq.isEmpty |> not)
 
         /// Insert a new variation into an existing global rank graph
         let insertSequence (rg: GlobalRankGraph) (var: Variation<string>) : GlobalRankGraph =
