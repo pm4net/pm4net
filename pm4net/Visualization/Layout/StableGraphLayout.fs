@@ -113,7 +113,7 @@ type StableGraphLayout private () =
                 let (nodes, edges) = seq |> List.partition (fun s -> match s with | Node _, _ -> true | Edge _, _ -> false)
                 // First insert all nodes in the sequence to ensure that they exist before adding edges, which need to know the rank of the connecting nodes
                 // There may be the same node multiple times in the same sequence (not directly after each other). In that case, the later nodes are discarded here (behaviour not specified in Mannens 2018)
-                let rg =
+                let rankGraph =
                     ((rankGraph, rankGraph |> lowestRank), nodes |> List.distinctBy fst) ||> List.fold (fun (graph, nextRank) (node, _) ->
                         { graph with
                             Nodes =
@@ -124,7 +124,7 @@ type StableGraphLayout private () =
                         nextRank + 1
                     ) |> fst
                 // Now add the edges in the sequence
-                (rg, edges) ||> List.fold (fun graph (edge, freq) ->
+                (rankGraph, edges) ||> List.fold (fun graph (edge, freq) ->
                     { graph with
                         Edges =
                             match edge with
@@ -132,6 +132,43 @@ type StableGraphLayout private () =
                             | _ -> graph.Edges
                     }
                 )
+
+            /// Insert a Type 2 sequence (single edge) into a global rank graph
+            let insertSingleEdge rankGraph (a, b, freq) =
+                let rankA = rankOfNode rankGraph a
+                let rankB = rankOfNode rankGraph b
+                match rankB - rankA with
+                | diff when diff > 0 -> // Forward edge
+                    { rankGraph with Edges = ((a, rankA), (b, rankB), freq) :: rankGraph.Edges }
+                | diff when diff < 0 -> // Backward edge
+
+                    System.NotImplementedException("TODO: Type 2, backward edge") |> raise
+                | 0 -> // Horizontal edge
+                    System.NotImplementedException("TODO: Type 2, horizontal edge") |> raise
+                | _ -> rankGraph // Impossible, but to silence about incomplete pattern matching due to when expressions
+
+            /// Insert a Type 3 or 4 sequence into a global rank graph, expecting a function to modify the rank counter for each node encountered
+            let insertAsymmetricSequence rankModifier rankGraph seq start =
+                let startRank = rankOfNode rankGraph start
+                // First insert all nodes by going through the sequence, adjusting the rank with each node encountered
+                let rankGraph =
+                    ((rankGraph, startRank |> rankModifier), seq) ||> List.fold (fun (graph, nextRank) elem ->
+                        match elem with
+                        | Node n, _ -> ({ graph with Nodes = (n, nextRank) :: graph.Nodes }, nextRank |> rankModifier)
+                        | _ -> graph, nextRank
+                    ) |> fst
+                // Now add the edges in the sequence
+                (rankGraph, seq) ||> List.fold (fun graph elem ->
+                    match elem with
+                    | Edge (a, b), freq -> { graph with Edges = ((a, rankOfNode graph a), (b, rankOfNode graph b), freq) :: graph.Edges }
+                    | _ -> graph
+                )
+
+            /// Insert a Type 6 sequence into a global rank graph (see Alogrithm 5 in Mennens 2018)
+            let insertEdgeToEdge (rankGraph: GlobalRankGraph) (seq: (SequenceElement<string> * int) list) =
+                let (u, x) = match seq.Head with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Starting element must be an edge", nameof seq) |> raise
+                let (y, v) = match seq |> List.last with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Last element must be an edge", nameof seq) |> raise
+                rankGraph // TODO: Implement
 
             // Get the new sequences that have not been added to the global rank graph yet
             let newSeqs = newSequence rankGraph variation |> Seq.map List.ofSeq |> List.ofSeq
@@ -155,13 +192,13 @@ type StableGraphLayout private () =
             (rankGraph, newSeqs) ||> List.fold (fun graph newSeq ->
                 match newSeq with
                 | [Node _, _] -> insertNodeToNode rankGraph newSeq // Type 1
-                | [Edge _, _] -> graph // Type 2
+                | [Edge (a, b), freq] -> insertSingleEdge rankGraph (a, b, freq) // Type 2
                 | _ ->
                     match newSeq, newSeq |> List.rev |> List.head with
-                    | (Node _, _) :: _, (Edge _, _) -> graph // Type 3
-                    | (Edge _, _) :: _, (Node _, _) -> graph // Type 4
+                    | (Node _, _) :: _, (Edge (_ , destination), _) -> insertAsymmetricSequence (fun r -> r - 1) rankGraph (newSeq |> List.rev) destination // Type 3
+                    | (Edge (origin, _), _) :: _, (Node _, _) -> insertAsymmetricSequence (fun r -> r + 1) rankGraph newSeq origin // Type 4
                     | (Node _, _) :: _, (Node _, _) -> insertNodeToNode rankGraph newSeq // Type 5
-                    | (Edge _, _) :: _, (Edge _, _) -> graph // Type 6
+                    | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph newSeq // Type 6
                     | _ -> graph
             )
 
