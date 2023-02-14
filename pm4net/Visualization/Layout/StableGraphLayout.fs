@@ -133,9 +133,26 @@ type StableGraphLayout private () =
                     }
                 )
 
-            let newSeqs = newSequence rankGraph variation |> Seq.map List.ofSeq |> List.ofSeq // Get the new sequences that have not been added to the global rank graph yet
-            // TODO: Also find the sequence elements that do already exist, in order to increase their frequency with the current variation's frequency
-            (rankGraph, newSeqs) ||> Seq.fold (fun graph newSeq ->
+            // Get the new sequences that have not been added to the global rank graph yet
+            let newSeqs = newSequence rankGraph variation |> Seq.map List.ofSeq |> List.ofSeq
+
+            // Get the edges that are already in the graph, so that the frequencies can be incremented (returns only index of edge and frequency to add)
+            let alreadyKnownEdges = variation.Sequence |> List.choose (fun se ->
+                match se with
+                | Edge(a, b), freq ->
+                    match rankGraph.Edges |> List.tryFindIndex (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) with
+                    | Some idx -> Some (idx, freq)
+                    | _ -> None
+                | _ -> None)
+
+            // Update the global rank graph with the frequencies of edges that are not new but appear in variation
+            let rankGraph = (rankGraph, alreadyKnownEdges) ||> List.fold (fun graph (idx, freqToIncrement) ->
+                let (a, b, existingFreq) = graph.Edges[idx]
+                { graph with Edges = graph.Edges |> List.updateAt idx (a, b, existingFreq + freqToIncrement) }
+            )
+
+            // Insert the new sequence elements into the global rank graph according to the techniques for the different types of sequences in Mennens 2018
+            (rankGraph, newSeqs) ||> List.fold (fun graph newSeq ->
                 match newSeq with
                 | [Node _, _] -> insertNodeToNode rankGraph newSeq // Type 1
                 | [Edge _, _] -> graph // Type 2
