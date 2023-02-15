@@ -98,7 +98,7 @@ type StableGraphLayout private () =
             ) |> List.filter (fun l -> l |> List.isEmpty |> not)
 
         /// Insert a new variation into an existing global rank graph
-        let insertSequence (rankGraph, components: List<Set<string>>) variation =
+        let insertSequence (rankGraph, components) variation =
 
             /// Get the lowest rank encountered so far for any node
             let lowestRank rankGraph =
@@ -108,16 +108,36 @@ type StableGraphLayout private () =
             let rankOfNode rankGraph node =
                 rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
 
+            /// Find the index of the set that contains a given value in a list of sets, if it exists
+            let findContainingSetIndex components value =
+                List.tryFindIndex (fun set -> set |> Set.contains value) components
+
+            /// Traverse the rank graph downwards from a starting point to find the reachable nodes within a given number of ranks (Algorithm 4 from Mennens 2018)
+            let rec traverse (rankGraph: GlobalRankGraph) (numRanks: int) (node: string) (visited: string list) =
+
+                /// Get the edges that match the traversal criteria, using a boolean flag to get either the origin or destination of the node
+                let getEdges out =
+                    rankGraph.Edges |> List.filter (fun e ->
+                        let ((a, _), (b, _), _) = e
+                        let n, v = if out then a, b else b, a
+                        if n = node && visited |> List.contains v |> not then
+                            let nRank, vRank = n |> rankOfNode rankGraph, v |> rankOfNode rankGraph
+                            vRank > nRank && vRank - nRank <= numRanks
+                        else false)
+
+                let visited = node :: visited
+                let outEdges = getEdges true
+                let visited = (visited, outEdges) ||> List.fold (fun vis (_, (target, _), _) -> (target, vis) ||> traverse rankGraph numRanks)
+                let inEdges = getEdges false
+                let visited = (visited, inEdges) ||> List.fold (fun vis ((target, _), _, _) -> (target, vis) ||> traverse rankGraph numRanks)
+                visited
+
             /// Add a new node to the rank graph. Expects new nodes to be disjoint from all other nodes, so always add nodes before edges!
             let addNode rankGraph components node =
                 { rankGraph with Nodes = node :: rankGraph.Nodes }, ([(fst node |> Set.singleton)], components) ||> List.append
 
             /// Add a new edge to the rank graph, updating the the connected components
             let addEdge rankGraph components edge =
-                /// Find the index of the set that contains a given value in a list of sets, if it exists
-                let findContainingSetIndex components value =
-                    List.tryFindIndex (fun set -> set |> Set.contains value) components
-
                 // If the edge connects two disjoint sets, merge them together
                 let ((a, _), (b, _), _) = edge
                 let components =
@@ -134,7 +154,7 @@ type StableGraphLayout private () =
                 { rankGraph with Edges = edge :: rankGraph.Edges }, components
 
             /// Insert a Type 1 or 5 sequence into a global rank graph 
-            let insertNodeToNode rankGraph (components: List<Set<string>>) (seq: (SequenceElement<string> * int) list) =
+            let insertNodeToNode rankGraph components seq =
                 let (nodes, edges) = seq |> List.partition (fun s -> match s with | Node _, _ -> true | Edge _, _ -> false)
                 // First insert all nodes in the sequence to ensure that they exist before adding edges, which need to know the rank of the connecting nodes
                 // There may be the same node multiple times in the same sequence (not directly after each other). In that case, the later nodes are discarded here (behaviour not specified in Mannens 2018)
@@ -154,20 +174,40 @@ type StableGraphLayout private () =
                 )
 
             /// Insert a Type 2 sequence (single edge) into a global rank graph
-            let insertSingleEdge rankGraph (a, b, freq) =
+            let insertSingleEdge rankGraph components (a, b, freq) =
                 let rankA = rankOfNode rankGraph a
                 let rankB = rankOfNode rankGraph b
                 match rankB - rankA with
                 | diff when diff > 0 -> // Forward edge
                     ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
                 | diff when diff < 0 -> // Backward edge
-                    System.NotImplementedException("TODO: Type 2, backward edge") |> raise
-                | 0 -> // Horizontal edge
-                    System.NotImplementedException("TODO: Type 2, horizontal edge") |> raise
+                    match a |> findContainingSetIndex components, b |> findContainingSetIndex components with
+                    | Some aIdx, Some bIdx when aIdx = bIdx -> // Part of the same component, so allow backwards edge
+                        ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
+                    | Some aIdx, Some bIdx -> // Edge connects two previously unconnected components, so shift component B down to create forward edge
+                        System.NotImplementedException("TODO: Type 2, backwards edge that connects two unconnected components") |> raise
+                    | _ -> rankGraph, components
+                | 0 -> // Horizontal edge, shift nodes downwards (Algorithm 3 from Mennens 2018)
+                    let numRanks = 1
+                    let visited = traverse rankGraph numRanks b [a]
+                    let rankGraph, components = ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
+                    (rankGraph, rankGraph.Nodes) ||> List.fold (fun graph (node, _) ->
+                        if node <> a && visited |> List.contains node then
+                            // Shift node's rank down by numRanks, and update newly added edge to reflect new rank
+                            { graph with
+                                Nodes =
+                                    let idx = graph.Nodes |> List.findIndex (fun (n, _) -> n = node)
+                                    graph.Nodes |> List.updateAt idx (node, rankB + numRanks)
+                                Edges =
+                                    let idx = graph.Edges |> List.findIndex (fun ((aEdge, _), (bEdge, _), _) -> a = aEdge && b = bEdge)
+                                    graph.Edges |> List.updateAt idx ((a, rankA), (b, rankB + numRanks), freq)
+                            }
+                        else graph
+                    ), components
                 | _ -> rankGraph, components // Impossible, but to silence about incomplete pattern matching due to when expressions
 
             /// Insert a Type 3 or 4 sequence into a global rank graph, expecting a function to modify the rank counter for each node encountered
-            let insertAsymmetricSequence rankModifier rankGraph seq start =
+            let insertAsymmetricSequence rankModifier rankGraph components seq start =
                 let startRank = rankOfNode rankGraph start
                 // First insert all nodes by going through the sequence, adjusting the rank with each node encountered
                 let rankGraph, components, _ =
@@ -186,8 +226,8 @@ type StableGraphLayout private () =
                 )
 
             /// Insert a Type 6 sequence into a global rank graph (see Alogrithm 5 in Mennens 2018)
-            let insertEdgeToEdge (rankGraph: GlobalRankGraph) (seq: (SequenceElement<string> * int) list) =
-                let (u, x) = match seq.Head with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Starting element must be an edge", nameof seq) |> raise
+            let insertEdgeToEdge rankGraph components seq =
+                let (u, x) = match seq |> List.head with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Starting element must be an edge", nameof seq) |> raise
                 let (y, v) = match seq |> List.last with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Last element must be an edge", nameof seq) |> raise
                 rankGraph, components // TODO: Implement
 
@@ -213,15 +253,14 @@ type StableGraphLayout private () =
             ((rankGraph, components), newSeqs) ||> List.fold (fun (graph, components) newSeq ->
                 match newSeq with
                 | [Node _, _] -> insertNodeToNode rankGraph components newSeq // Type 1
-                | [Edge (a, b), freq] -> insertSingleEdge rankGraph (a, b, freq) // Type 2
+                | [Edge (a, b), freq] -> insertSingleEdge rankGraph components (a, b, freq) // Type 2
                 | _ ->
                     match newSeq, newSeq |> List.rev |> List.head with
-                    | (Node _, _) :: _, (Edge (_ , destination), _) -> insertAsymmetricSequence (fun r -> r - 1) rankGraph (newSeq |> List.rev) destination // Type 3
-                    | (Edge (origin, _), _) :: _, (Node _, _) -> insertAsymmetricSequence (fun r -> r + 1) rankGraph newSeq origin // Type 4
+                    | (Node _, _) :: _, (Edge (_ , destination), _) -> insertAsymmetricSequence (fun r -> r - 1) rankGraph components (newSeq |> List.rev) destination // Type 3
+                    | (Edge (origin, _), _) :: _, (Node _, _) -> insertAsymmetricSequence (fun r -> r + 1) rankGraph components newSeq origin // Type 4
                     | (Node _, _) :: _, (Node _, _) -> insertNodeToNode rankGraph components newSeq // Type 5
-                    | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph newSeq // Type 6
-                    | _ -> graph, components
-            )
+                    | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph components newSeq // Type 6
+                    | _ -> graph, components)
 
         /// Compute a ranking for a flattened event log
         let computeRanking log =
