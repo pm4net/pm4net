@@ -22,3 +22,10 @@ module StableGraphLayoutTests =
         let log = OcelJson.deserialize true json
         let gr = StableGraphLayout.ComputeGlobalRanking log
         gr |> Assert.NotNull
+
+    [<Fact>]
+    let ``Can discover stable graph layout from 'recruiting' log`` () =
+        let json = File.ReadAllText("recruiting.jsonocel")
+        let log = OcelJson.deserialize true json
+        let gr = StableGraphLayout.ComputeGlobalRanking log
+        gr |> Assert.NotNull
