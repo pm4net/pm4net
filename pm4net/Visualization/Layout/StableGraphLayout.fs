@@ -109,8 +109,8 @@ type StableGraphLayout private () =
                 rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
 
             /// Find the index of the set that contains a given value in a list of sets, if it exists
-            let findContainingSetIndex components value =
-                List.tryFindIndex (fun set -> set |> Set.contains value) components
+            let findContainingComponentIndex components value =
+                List.findIndex (fun set -> set |> Set.contains value) components
 
             /// Traverse the rank graph downwards from a starting point to find the reachable nodes within a given number of ranks (Algorithm 4 from Mennens 2018)
             let rec traverse rankGraph numRanks node visited =
@@ -146,42 +146,52 @@ type StableGraphLayout private () =
                     Edges = (rankGraph.Edges, outEdges @ inEdges) ||> List.fold (fun s (i, e) -> s |> List.updateAt i e)
                 }
 
-            /// Add a new edge to the rank graph, updating the the connected components
+            /// Add a new edge to the rank graph, updating the the connected components. Excepts nodes of wedges to already exist, so always add nodes before edges!
             let addEdge rankGraph components edge =
                 // If the edge connects two disjoint sets, merge them together
                 let ((a, _), (b, _), _) = edge
                 let components =
-                    match a |> findContainingSetIndex components, b |> findContainingSetIndex components with
-                    | Some aIdx, Some bIdx ->
-                        if aIdx <> bIdx then
-                            let aSet, bSet = components[aIdx], components[bIdx]
-                            let components = if aIdx > bIdx then components |> List.removeAt aIdx |> List.removeAt bIdx else components |> List.removeAt bIdx |> List.removeAt aIdx
-                            components |> List.append [aSet |> Set.union bSet]
-                        else components
-                    | _ -> failwith $"Could not find component that contains either {a} or {b}. Always add all nodes before adding edges between them."
+                    let aIdx, bIdx = a |> findContainingComponentIndex components, b |> findContainingComponentIndex components
+                    if aIdx <> bIdx then
+                        let aSet, bSet = components[aIdx], components[bIdx]
+                        let components = if aIdx > bIdx then components |> List.removeAt aIdx |> List.removeAt bIdx else components |> List.removeAt bIdx |> List.removeAt aIdx
+                        components |> List.append [aSet |> Set.union bSet]
+                    else components
 
                 // Add the edge to the rank graph and return it together with the updated component list
                 { rankGraph with Edges = edge :: rankGraph.Edges }, components
 
-            /// Insert a Type 1 or 5 sequence into a global rank graph 
-            let insertNodeToNode rankGraph components seq =
+            /// Insert a sequence of nodes and edges to the rank graph, updating the components along the way
+            let insertSequenceIntoGraph rankModifier rankGraph components startRank seq =
                 let (nodes, edges) = seq |> List.partition (fun s -> match s with | Node _, _ -> true | Edge _, _ -> false)
+
                 // First insert all nodes in the sequence to ensure that they exist before adding edges, which need to know the rank of the connecting nodes
-                // There may be the same node multiple times in the same sequence (not directly after each other). In that case, the later nodes are discarded here (behaviour not specified in Mannens 2018)
+                // There may be the same node or same edge multiple times in the same sequence, however not directly after each other (filtered out previously).
+                // This case is unspecified by Mannens 2018, but is handled in the following way here:
+                // For multiple nodes, latter nodes are simply discarded.
+                // For edges, latter edges edges are discarded, but the frequencies are summed up beforehand and added to the first occurrence.
                 let rankGraph, components, _ =
-                    ((rankGraph, components, rankGraph |> lowestRank), nodes |> List.distinctBy fst) ||> List.fold (fun (graph, components, nextRank) (node, _) ->
+                    ((rankGraph, components, startRank), nodes |> List.distinctBy fst) ||> List.fold (fun (graph, components, nextRank) node ->
                         match node with
-                        | Node n ->
+                        | Node n, _ ->
                             let graph, components = (n, nextRank) |> addNode graph components
-                            graph, components, nextRank + 1
-                        | Edge _ -> graph, components, nextRank
-                    )
-                // Now add the edges in the sequence
+                            graph, components, nextRank |> rankModifier
+                        | _ -> graph, components, nextRank)
+
+                // Group edges of the same origin+destination together, and reduce them to single edges with their frequencies summed up
+                let edges =
+                    edges
+                    |> List.groupBy (fun (e, _) ->
+                        match e with
+                        | Edge (a, b) -> a, b
+                        | _ -> failwith "Nodes are not allowed here.")
+                    |> List.map (fun (_, edges) -> edges |> List.reduce (fun (e, f1) (_, f2) -> e, f1 + f2))
+
+                // Add the edges to the rank graph
                 ((rankGraph, components), edges) ||> List.fold (fun (graph, components) (edge, freq) ->
                     match edge with
                     | Edge (a, b) -> ((a, a |> rankOfNode graph), (b, b |> rankOfNode graph), freq) |> addEdge graph components
-                    | _ -> graph, components
-                )
+                    | _ -> graph, components)
 
             /// Insert a Type 2 sequence (single edge) into a global rank graph
             let insertSingleEdge rankGraph components (a, b, freq) =
@@ -191,17 +201,16 @@ type StableGraphLayout private () =
                 | diff when diff > 0 -> // Forward edge
                     ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
                 | diff when diff < 0 -> // Backward edge
-                    match a |> findContainingSetIndex components, b |> findContainingSetIndex components with
-                    | Some aIdx, Some bIdx when aIdx = bIdx ->
+                    match a |> findContainingComponentIndex components, b |> findContainingComponentIndex components with
+                    | aIdx, bIdx when aIdx = bIdx ->
                         // Part of the same component, so allow backwards edge
                         ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
-                    | Some _, Some bIdx ->
+                    | _, bIdx ->
                         // Edge connects two previously unconnected components, so shift component B down to create forward edge (Algorithm 2 from Mennens 2018)
                         let dist = rankA - rankB + 1
                         let rankGraph = (rankGraph, components[bIdx]) ||> Set.fold (fun graph node ->
                             updateNode graph node ((rankOfNode graph node) + dist))
                         ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
-                    | _ -> rankGraph, components
                 | 0 -> // Horizontal edge, shift nodes downwards (Algorithm 3 from Mennens 2018)
                     let numRanks = 1
                     let visited = traverse rankGraph numRanks b [a]
@@ -214,30 +223,30 @@ type StableGraphLayout private () =
                     ), components
                 | _ -> rankGraph, components // Impossible, but to silence about incomplete pattern matching due to when expressions
 
-            /// Insert a Type 3 or 4 sequence into a global rank graph, expecting a function to modify the rank counter for each node encountered
-            let insertAsymmetricSequence rankModifier rankGraph components seq start =
-                let startRank = rankOfNode rankGraph start
-                // First insert all nodes by going through the sequence, adjusting the rank with each node encountered
-                let rankGraph, components, _ =
-                    ((rankGraph, components, startRank |> rankModifier), seq) ||> List.fold (fun (graph, components, nextRank) elem ->
-                        match elem with
-                        | Node n, _ ->
-                            let graph, components = (n, nextRank) |> addNode graph components
-                            graph, components, nextRank |> rankModifier
-                        | _ -> graph, components, nextRank
-                    )
-                // Now add the edges in the sequence
-                ((rankGraph, components), seq) ||> List.fold (fun (graph, components) elem ->
-                    match elem with
-                    | Edge (a, b), freq -> ((a, rankOfNode graph a), (b, rankOfNode graph b), freq) |> addEdge graph components
-                    | _ -> graph, components
-                )
-
-            /// Insert a Type 6 sequence into a global rank graph (see Alogrithm 5 in Mennens 2018)
+            /// Insert a Type 6 sequence into a global rank graph (see Algorithm 5 in Mennens 2018)
             let insertEdgeToEdge rankGraph components seq =
                 let (u, x) = match seq |> List.head with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Starting element must be an edge", nameof seq) |> raise
                 let (y, v) = match seq |> List.last with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Last element must be an edge", nameof seq) |> raise
-                System.NotImplementedException("TODO: Type 6, edge to edge") |> raise
+                let compU, compV = findContainingComponentIndex components u, findContainingComponentIndex components v
+
+                // Decide what to do based on how the sequence fits into the existing graph
+                if compU <> compV then
+                    rankGraph, components // TODO
+                else
+                    let rankU, rankV = rankOfNode rankGraph u, rankOfNode rankGraph v
+                    let noOfNodes = seq |> List.choose (fun s -> match s with | Node n, _ -> Some n | _ -> None) |> List.length
+                    if rankU <= rankV then
+                        let rankGraph, components = insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankU + 1) seq
+                        let freeRanks = rankV - rankU - 1
+                        if noOfNodes > freeRanks then
+                            rankGraph, components
+                        else rankGraph, components
+                    else
+                        let rankGraph, components = insertSequenceIntoGraph (fun r -> r - 1) rankGraph components (rankU - 1) seq
+                        let freeRanks = rankU - rankV - 1
+                        if noOfNodes > freeRanks then
+                            rankGraph, components // TODO
+                        else rankGraph, components
 
             // Get the new sequences that have not been added to the global rank graph yet
             let newSeqs = newSequence rankGraph variation |> Seq.map List.ofSeq |> List.ofSeq
@@ -260,13 +269,13 @@ type StableGraphLayout private () =
             // Insert the new sequence elements into the global rank graph according to the techniques for the different types of sequences in Mennens 2018
             ((rankGraph, components), newSeqs) ||> List.fold (fun (graph, components) newSeq ->
                 match newSeq with
-                | [Node _, _] -> insertNodeToNode rankGraph components newSeq // Type 1
+                | [Node _, _] -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankGraph |> lowestRank) newSeq // Type 1
                 | [Edge (a, b), freq] -> insertSingleEdge rankGraph components (a, b, freq) // Type 2
                 | _ ->
                     match newSeq, newSeq |> List.rev |> List.head with
-                    | (Node _, _) :: _, (Edge (_ , destination), _) -> insertAsymmetricSequence (fun r -> r - 1) rankGraph components (newSeq |> List.rev) destination // Type 3
-                    | (Edge (origin, _), _) :: _, (Node _, _) -> insertAsymmetricSequence (fun r -> r + 1) rankGraph components newSeq origin // Type 4
-                    | (Node _, _) :: _, (Node _, _) -> insertNodeToNode rankGraph components newSeq // Type 5
+                    | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) rankGraph components ((dest |> rankOfNode rankGraph) - 1) (newSeq |> List.rev) // Type 3
+                    | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components ((orig |> rankOfNode rankGraph) + 1) newSeq // Type 4
+                    | (Node _, _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankGraph |> lowestRank) newSeq // Type 5
                     | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph components newSeq // Type 6
                     | _ -> graph, components)
 
