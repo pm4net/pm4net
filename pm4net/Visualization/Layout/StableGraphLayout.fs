@@ -130,7 +130,7 @@ type StableGraphLayout private () =
                 let visited = (visited, outEdges) ||> List.fold (fun vis (_, (target, _), _) -> (target, vis) ||> traverse rankGraph numRanks)
                 let inEdges = getEdges false
                 let visited = (visited, inEdges) ||> List.fold (fun vis ((target, _), _, _) -> (target, vis) ||> traverse rankGraph numRanks)
-                visited
+                visited |> List.distinct
 
             /// Add a new node to the rank graph. Expects new nodes to be disjoint from all other nodes, so always add nodes before edges!
             let addNode rankGraph components node =
@@ -145,6 +145,16 @@ type StableGraphLayout private () =
                     Nodes = rankGraph.Nodes |> List.updateAt nodeIdx (node, newRank)
                     Edges = (rankGraph.Edges, outEdges @ inEdges) ||> List.fold (fun s (i, e) -> s |> List.updateAt i e)
                 }
+
+            /// Shift the destination of the edge and all nodes reachable via downward traversal by the a number of ranks (Algorithm 3 from Mennens 2018)
+            let shiftNodes rankGraph a b numRanks =
+                let visited = traverse rankGraph numRanks b [a]
+                (rankGraph, rankGraph.Nodes) ||> List.fold (fun graph (node, _) ->
+                    // Shift node's rank down by numRanks, and update newly added edge to reflect new rank
+                    if node <> a && visited |> List.contains node then
+                        (node, (rankOfNode graph node) + numRanks) ||> updateNode graph
+                    else graph
+                )
 
             /// Add a new edge to the rank graph, updating the the connected components. Excepts nodes of wedges to already exist, so always add nodes before edges!
             let addEdge rankGraph components edge =
@@ -198,7 +208,10 @@ type StableGraphLayout private () =
                 let rankA = rankOfNode rankGraph a
                 let rankB = rankOfNode rankGraph b
                 match rankB - rankA with
-                | diff when diff > 0 -> // Forward edge
+                | 0 -> // Horizontal edge, shift nodes downwards (Algorithm 3 from Mennens 2018)
+                    let rankGraph, components = ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
+                    shiftNodes rankGraph a b 1, components
+                | diff when diff > 0 -> // Forward edge, can simply be added
                     ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
                 | diff when diff < 0 -> // Backward edge
                     match a |> findContainingComponentIndex components, b |> findContainingComponentIndex components with
@@ -211,41 +224,32 @@ type StableGraphLayout private () =
                         let rankGraph = (rankGraph, components[bIdx]) ||> Set.fold (fun graph node ->
                             updateNode graph node ((rankOfNode graph node) + dist))
                         ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
-                | 0 -> // Horizontal edge, shift nodes downwards (Algorithm 3 from Mennens 2018)
-                    let numRanks = 1
-                    let visited = traverse rankGraph numRanks b [a]
-                    let rankGraph, components = ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
-                    (rankGraph, rankGraph.Nodes) ||> List.fold (fun graph (node, _) ->
-                        // Shift node's rank down by numRanks, and update newly added edge to reflect new rank
-                        if node <> a && visited |> List.contains node then
-                            (node, rankB + numRanks) ||> updateNode rankGraph
-                        else graph
-                    ), components
                 | _ -> rankGraph, components // Impossible, but to silence about incomplete pattern matching due to when expressions
 
             /// Insert a Type 6 sequence into a global rank graph (see Algorithm 5 in Mennens 2018)
             let insertEdgeToEdge rankGraph components seq =
-                let (u, x) = match seq |> List.head with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Starting element must be an edge", nameof seq) |> raise
+                let (u, _) = match seq |> List.head with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Starting element must be an edge", nameof seq) |> raise
                 let (y, v) = match seq |> List.last with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Last element must be an edge", nameof seq) |> raise
                 let compU, compV = findContainingComponentIndex components u, findContainingComponentIndex components v
+                let rankU, rankV = rankOfNode rankGraph u, rankOfNode rankGraph v
 
                 // Decide what to do based on how the sequence fits into the existing graph
                 if compU <> compV then
-                    rankGraph, components // TODO
+                    insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankU + 1) seq
+                    // TODO: Merge components
                 else
-                    let rankU, rankV = rankOfNode rankGraph u, rankOfNode rankGraph v
-                    let noOfNodes = seq |> List.choose (fun s -> match s with | Node n, _ -> Some n | _ -> None) |> List.length
+                    let noOfNodes = seq |> List.choose (fun s -> match s with | Node n, _ -> Some n | _ -> None) |> List.distinct |> List.length
                     if rankU <= rankV then
                         let rankGraph, components = insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankU + 1) seq
                         let freeRanks = rankV - rankU - 1
                         if noOfNodes > freeRanks then
-                            rankGraph, components
+                            shiftNodes rankGraph y v (rankOfNode rankGraph y - rankV + 1), components
                         else rankGraph, components
                     else
                         let rankGraph, components = insertSequenceIntoGraph (fun r -> r - 1) rankGraph components (rankU - 1) seq
                         let freeRanks = rankU - rankV - 1
                         if noOfNodes > freeRanks then
-                            rankGraph, components // TODO
+                            shiftNodes rankGraph v y (rankV - rankOfNode rankGraph y + 1), components
                         else rankGraph, components
 
             // Get the new sequences that have not been added to the global rank graph yet
