@@ -1,7 +1,7 @@
 namespace pm4net.Visualization.Layout
 
-open System
 open OCEL.Types
+open pm4net.Types
 open pm4net.Types.Dfg
 open pm4net.Utilities
 
@@ -60,8 +60,8 @@ type StableGraphLayout private () =
             // Add a start and end node for the object type to each trace, if it is specified
             match objType with
             | Some objType ->
-                let startEvent = { Activity = $"StartEvent {objType}"; Timestamp = (events |> List.head |> fun e -> e.Timestamp.AddTicks(-1)); OMap = []; VMap = Map.empty }
-                let endEvent = { Activity = $"EndEvent {objType}"; Timestamp = (events |> List.last |> fun e -> e.Timestamp.AddTicks(1)); OMap = []; VMap = Map.empty }
+                let startEvent = { Activity = $"{Constants.objectTypeStartNode} {objType}"; Timestamp = (events |> List.head |> fun e -> e.Timestamp.AddTicks(-1)); OMap = []; VMap = Map.empty }
+                let endEvent = { Activity = $"{Constants.objectTypeEndNode} {objType}"; Timestamp = (events |> List.last |> fun e -> e.Timestamp.AddTicks(1)); OMap = []; VMap = Map.empty }
                 startEvent :: events @ [endEvent]
             | None -> events)
         |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
@@ -341,6 +341,7 @@ type StableGraphLayout private () =
     static member ComputeGlobalRankingForEachObjectType (log: OcelLog) =
         log.ObjectTypes |> Seq.map (fun ot -> ot, StableGraphLayout.ComputeGlobalRankingForObjectType log ot) |> Map.ofSeq
 
+    /// Compute a global order
     static member ComputeGlobalOrder (rg: GlobalRankGraph) =
         rg
 

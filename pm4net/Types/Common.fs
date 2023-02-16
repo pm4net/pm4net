@@ -17,3 +17,20 @@ type LogLevel =
             | "Error" -> Error
             | "Fatal" -> Fatal
             | _ -> Unknown
+
+module Constants =
+
+    [<Literal>]
+    let ``namespace`` = "pm4net_Namespace"
+    
+    [<Literal>]
+    let sourceContext = "SourceContext"
+
+    [<Literal>]
+    let level = "pm4net_Level"
+
+    [<Literal>]
+    let objectTypeStartNode = "pm4net_Start"
+
+    [<Literal>]
+    let objectTypeEndNode = "pm4net_End"
