@@ -14,11 +14,26 @@ module StableGraphLayoutTests =
         gr.Edges |> List.forall (fun ((a, aRank), (b, bRank), _) -> if a = b then aRank = bRank else aRank <> bRank) // No horizontal edges (except self-loops)
 
     [<Fact>]
+    let ``Can discover stable graph layout from Blazor log for each object type`` () =
+        let json = File.ReadAllText("blazor-logs.jsonocel")
+        let log = OcelJson.deserialize true json
+        let log = log.MergeDuplicateObjects()
+        let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
+        gr |> Map.forall (fun _ v -> globalRankValid v) |> Assert.True
+
+    [<Fact>]
     let ``Can discover stable graph layout from Blazor log`` () =
         let json = File.ReadAllText("blazor-logs.jsonocel")
         let log = OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
         let gr = StableGraphLayout.ComputeGlobalRanking log
+        gr |> globalRankValid |> Assert.True
+
+    [<Fact>]
+    let ``Can discover stable graph layout from 'GitHub pm4py' log for each object type`` () =
+        let json = File.ReadAllText("github_pm4py.jsonocel")
+        let log = OcelJson.deserialize true json
+        let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
         gr |> Map.forall (fun _ v -> globalRankValid v) |> Assert.True
 
     [<Fact>]
@@ -26,6 +41,13 @@ module StableGraphLayoutTests =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
         let gr = StableGraphLayout.ComputeGlobalRanking log
+        gr |> globalRankValid |> Assert.True
+
+    [<Fact>]
+    let ``Can discover stable graph layout from 'recruiting' log for each object type`` () =
+        let json = File.ReadAllText("recruiting.jsonocel")
+        let log = OcelJson.deserialize true json
+        let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
         gr |> Map.forall (fun _ v -> globalRankValid v) |> Assert.True
 
     [<Fact>]
@@ -33,4 +55,4 @@ module StableGraphLayoutTests =
         let json = File.ReadAllText("recruiting.jsonocel")
         let log = OcelJson.deserialize true json
         let gr = StableGraphLayout.ComputeGlobalRanking log
-        gr |> Map.forall (fun _ v -> globalRankValid v) |> Assert.True
+        gr |> globalRankValid|> Assert.True

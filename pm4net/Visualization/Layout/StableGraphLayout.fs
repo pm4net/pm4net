@@ -22,80 +22,61 @@ type private Variation<'a, 'b> = {
 [<AbstractClass; Sealed>]
 type StableGraphLayout private () =
 
-    /// <summary>
-    /// Compute a Global Ranking for all activities in an event log.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalRanking (log: OcelLog) =
+    /// Sort traces based on their importance (sum of w^2 * |v|^2)
+    static member private ImportanceSort variation =
+        let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0 | Edge _, freq -> pown freq 2)
+        let vLenSquared = pown variation.Events.Length 2
+        wSquaredSum * vLenSquared
 
-        /// Sort traces based on their importance (sum of w^2 * |v|^2)
-        let importanceSort variation =
-            let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0 | Edge _, freq -> pown freq 2)
-            let vLenSquared = pown variation.Events.Length 2
-            wSquaredSum * vLenSquared
+    /// Compute the sequence of a trace, not accounting for the existing global rank graph (interleaved nodes and edges) (Definition 4.1.2 of Mennes 2018)
+    static member private SimpleSequence freq trace =
+        match trace with
+        | [] -> []
+        | [single] -> [Node(single), freq]
+        | _ -> 
+            trace
+            |> List.pairwise
+            |> List.mapi (fun i (a, b) ->
+                match i with
+                | 0 -> [Node(a), 0; Edge(a, b), freq; Node(b), 0]
+                | _ -> [Edge(a, b), freq; Node(b), 0])
+            |> List.concat
 
-        /// Compute the sequence of a trace, not accounting for the existing global rank graph (interleaved nodes and edges) (Definition 4.1.2 of Mennes 2018)
-        let simpleSequence freq trace =
-            match trace with
-            | [] -> []
-            | [single] -> [Node(single), freq]
-            | _ -> 
-                trace
-                |> List.pairwise
-                |> List.mapi (fun i (a, b) ->
-                    match i with
-                    | 0 -> [Node(a), 0; Edge(a, b), freq; Node(b), 0]
-                    | _ -> [Edge(a, b), freq; Node(b), 0])
-                |> List.concat
+    /// Removes direct repetitions in a list (e.g. [A,A,B,C,C] -> [A,B,C]). Section 2.1 of Mennens 2018.
+    static member private RemoveDirectRepetitions comparer trace =
+        ([], trace) ||> List.fold (fun state nextValue ->
+            match state |> List.tryLast with
+            | None -> [nextValue]
+            | Some last -> if comparer last nextValue then state else state @ [nextValue])
 
-        /// Removes direct repetitions in a list (e.g. [A,A,B,C,C] -> [A,B,C]). Section 2.1 of Mennens 2018.
-        let removeDirectRepetitions comparer trace =
-            ([], trace) ||> List.fold (fun state nextValue ->
-                match state |> List.tryLast with
-                | None -> [nextValue]
-                | Some last -> if comparer last nextValue then state else state @ [nextValue])
+    /// Extract the unique variations in the flattened log and order them by importance
+    static member private VariationsInLog log =
+        log
+        |> OcelHelpers.OrderedTracesOfFlattenedLog // Get traces based on referenced object
+        |> Helpers.mapNestedList snd // Discard the event ID as it is not relevant
+        |> List.map (fun t -> t |> StableGraphLayout.RemoveDirectRepetitions (fun a b -> a.Activity = b.Activity)) // Remove direct repetitions of events with the same activity
+        |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
+        |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> StableGraphLayout.SimpleSequence })
 
-        /// Extract the unique variations in the flattened log and order them by importance
-        let variationsInLog log =
-            log
-            |> OcelHelpers.OrderedTracesOfFlattenedLog // Get traces based on referenced object
-            |> Helpers.mapNestedList snd // Discard the event ID as it is not relevant
-            |> List.map (fun t -> t |> removeDirectRepetitions (fun a b -> a.Activity = b.Activity)) // Remove direct repetitions of events with the same activity
-            |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
-            |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> simpleSequence })
-            |> List.sortByDescending importanceSort // Importance-sort the variants so that the most important/frequent variants come first
+    /// Compute a global ranking for a list of variations, according to the Algorithm from Mennens 2018 & 2019
+    static member private ComputeGlobalRankingForVariations variations =
 
-        /// Extract all continuous sequences that only contain nodes and/or edges that are not yet in the rank graph (Mennens 2019, Section 3.1.1)
-        /// Uses sequence to efficiently access last element when adding new items to the last sequence.
-        let newSequence rankGraph variation =
-            // For each sequence element, find out whether it already exists in the global rank graph.
-            // If it does not, the element and subsequent elements form a new sequence that will be added to the graph.
-            // If it does already exist, increment the frequency of the edge elements by the frequency of the new edge sequence.
-            let partition =
-                variation.Sequence
-                |> List.indexed
-                |> List.map (fun (idx, elem) ->
-                    match elem with
-                    | Node n, _ -> idx, rankGraph.Nodes |> List.exists (fun (act, _) -> act = n)
-                    | Edge (a, b), _ -> idx, rankGraph.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
+        /// Update a node's rank in a rank graph, changing the edges that reference the nodes with it
+        let updateNode rankGraph node newRank =
+            let nodeIdx = rankGraph.Nodes |> List.findIndex (fun n -> fst n = node)
+            let outEdges = rankGraph.Edges |> List.indexed |> List.filter (fun (_, ((a, _), _, _)) -> a = node) |> List.map (fun (i, ((a, _), b, freq)) -> i, ((a, newRank), b, freq))
+            let inEdges = rankGraph.Edges |> List.indexed |> List.filter (fun (_, (_, (b, _), _)) -> b = node) |> List.map (fun (i, (a, (b, _), freq)) -> i, (a, (b, newRank), freq))
+            { rankGraph with
+                Nodes = rankGraph.Nodes |> List.updateAt nodeIdx (node, newRank)
+                Edges = (rankGraph.Edges, outEdges @ inEdges) ||> List.fold (fun s (i, e) -> s |> List.updateAt i e)
+            }
 
-            // Build the initial state of the folder by adding the first sequence element when it is new, otherwise an empty list
-            let initialState = if partition |> List.head |> snd |> not then variation.Sequence[partition |> List.head |> fst] |> List.singleton |> List.singleton else [[]]
-            (initialState, partition |> List.pairwise) ||> List.fold (fun state (last, current) ->
-                // Fold over the list of sequences, and determine whether a new sequence needs to be started based on the info about the last element
-                match last, current with
-                | (_, true), (_, false) ->
-                    // Add a new sequence with the only element being the current element
-                    variation.Sequence[fst current] |> List.singleton |> List.singleton |> List.append state
-                | (_, false), (_, false) ->
-                    // Append to the last sequence because the last element was new
-                    let lastIdx = List.length state - 1
-                    let updatedSeq = variation.Sequence[fst current] |> List.singleton |> List.append (state |> List.last)
-                    state |> List.updateAt lastIdx updatedSeq
-                | _ -> state
-            ) |> List.filter (fun l -> l |> List.isEmpty |> not)
+        /// Normalize the ranks of a rank graph so that the first node is always on rank 0 (can become negative during processing)
+        let normalizeRanks (rankGraph: GlobalRankGraph) =
+            let lowestRank = rankGraph.Nodes |> List.minBy snd |> snd
+            if lowestRank <> 0 then
+                (rankGraph, rankGraph.Nodes) ||> List.fold (fun graph (node, rank) -> updateNode graph node (rank - lowestRank))
+            else rankGraph
 
         /// Insert a new variation into an existing global rank graph
         let insertSequence (rankGraph, components) variation =
@@ -135,16 +116,6 @@ type StableGraphLayout private () =
             /// Add a new node to the rank graph. Expects new nodes to be disjoint from all other nodes, so always add nodes before edges!
             let addNode rankGraph components node =
                 { rankGraph with Nodes = node :: rankGraph.Nodes }, ([(fst node |> Set.singleton)], components) ||> List.append
-
-            /// Update a node's rank in a rank graph, changing the edges that reference the nodes with it
-            let updateNode (rankGraph: GlobalRankGraph) node newRank =
-                let nodeIdx = rankGraph.Nodes |> List.findIndex (fun n -> fst n = node)
-                let outEdges = rankGraph.Edges |> List.indexed |> List.filter (fun (_, ((a, _), _, _)) -> a = node) |> List.map (fun (i, ((a, _), b, freq)) -> i, ((a, newRank), b, freq))
-                let inEdges = rankGraph.Edges |> List.indexed |> List.filter (fun (_, (_, (b, _), _)) -> b = node) |> List.map (fun (i, (a, (b, _), freq)) -> i, (a, (b, newRank), freq))
-                { rankGraph with
-                    Nodes = rankGraph.Nodes |> List.updateAt nodeIdx (node, newRank)
-                    Edges = (rankGraph.Edges, outEdges @ inEdges) ||> List.fold (fun s (i, e) -> s |> List.updateAt i e)
-                }
 
             /// Shift the destination of the edge and all nodes reachable via downward traversal by the a number of ranks (Algorithm 3 from Mennens 2018)
             let shiftNodes rankGraph a b numRanks =
@@ -259,6 +230,36 @@ type StableGraphLayout private () =
                             shiftNodes rankGraph v y (rankV - rankOfNode rankGraph y + 1), components
                         else rankGraph, components
 
+            /// Extract all continuous sequences that only contain nodes and/or edges that are not yet in the rank graph (Mennens 2019, Section 3.1.1)
+            /// Uses sequence to efficiently access last element when adding new items to the last sequence.
+            let newSequence rankGraph variation =
+                // For each sequence element, find out whether it already exists in the global rank graph.
+                // If it does not, the element and subsequent elements form a new sequence that will be added to the graph.
+                // If it does already exist, increment the frequency of the edge elements by the frequency of the new edge sequence.
+                let partition =
+                    variation.Sequence
+                    |> List.indexed
+                    |> List.map (fun (idx, elem) ->
+                        match elem with
+                        | Node n, _ -> idx, rankGraph.Nodes |> List.exists (fun (act, _) -> act = n)
+                        | Edge (a, b), _ -> idx, rankGraph.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
+
+                // Build the initial state of the folder by adding the first sequence element when it is new, otherwise an empty list
+                let initialState = if partition |> List.head |> snd |> not then variation.Sequence[partition |> List.head |> fst] |> List.singleton |> List.singleton else [[]]
+                (initialState, partition |> List.pairwise) ||> List.fold (fun state (last, current) ->
+                    // Fold over the list of sequences, and determine whether a new sequence needs to be started based on the info about the last element
+                    match last, current with
+                    | (_, true), (_, false) ->
+                        // Add a new sequence with the only element being the current element
+                        variation.Sequence[fst current] |> List.singleton |> List.singleton |> List.append state
+                    | (_, false), (_, false) ->
+                        // Append to the last sequence because the last element was new
+                        let lastIdx = List.length state - 1
+                        let updatedSeq = variation.Sequence[fst current] |> List.singleton |> List.append (state |> List.last)
+                        state |> List.updateAt lastIdx updatedSeq
+                    | _ -> state
+                ) |> List.filter (fun l -> l |> List.isEmpty |> not)
+
             // Get the new sequences that have not been added to the global rank graph yet
             let newSeqs = newSequence rankGraph variation |> Seq.map List.ofSeq |> List.ofSeq
 
@@ -290,15 +291,34 @@ type StableGraphLayout private () =
                     | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph components newSeq // Type 6
                     | _ -> graph, components)
 
-        /// Compute a ranking for a flattened event log
-        let computeRanking log =
-            (({ Nodes = []; Edges = [] }, List.empty), log |> variationsInLog) ||> List.fold insertSequence |> fst
+        (({ Nodes = []; Edges = [] }, List.empty), variations) ||> List.fold insertSequence |> fst |> normalizeRanks
 
-        // Compute global ranking from each perspective when flattening logs for different object types
+    /// <summary>
+    /// Compute a Global Ranking for all activities in an event log, merging the flattened logs of all object types together to get a total view.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
+    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
+    /// </summary>
+    static member ComputeGlobalRanking (log: OcelLog) =
+        log.ObjectTypes
+        |> List.ofSeq
+        |> List.map (fun t -> OcelHelpers.Flatten log t |> StableGraphLayout.VariationsInLog)
+        |> List.concat
+        |> List.sortByDescending StableGraphLayout.ImportanceSort
+        |> StableGraphLayout.ComputeGlobalRankingForVariations
+
+    /// <summary>
+    /// Compute a Global Ranking for each object type in an event log.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
+    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
+    /// </summary>
+    static member ComputeGlobalRankingForEachObjectType (log: OcelLog) =
         log.ObjectTypes
         |> Seq.map (fun t -> t, OcelHelpers.Flatten log t)
         |> Map.ofSeq
-        |> Map.map (fun _ flattenedLog -> computeRanking flattenedLog)
+        |> Map.map (fun _ flattenedLog -> StableGraphLayout.VariationsInLog flattenedLog |> List.sortByDescending StableGraphLayout.ImportanceSort)
+        |> Map.map (fun _ variations -> StableGraphLayout.ComputeGlobalRankingForVariations variations)
 
     /// <summary>
     /// Compute a stable graph layout for the discovered graph.
