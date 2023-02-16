@@ -1,5 +1,6 @@
 namespace pm4net.Visualization.Layout
 
+open System
 open OCEL.Types
 open pm4net.Types.Dfg
 open pm4net.Utilities
@@ -50,11 +51,19 @@ type StableGraphLayout private () =
             | Some last -> if comparer last nextValue then state else state @ [nextValue])
 
     /// Extract the unique variations in the flattened log and order them by importance
-    static member private VariationsInLog log =
+    static member private VariationsInLog objType log =
         log
         |> OcelHelpers.OrderedTracesOfFlattenedLog // Get traces based on referenced object
         |> Helpers.mapNestedList snd // Discard the event ID as it is not relevant
-        |> List.map (fun t -> t |> StableGraphLayout.RemoveDirectRepetitions (fun a b -> a.Activity = b.Activity)) // Remove direct repetitions of events with the same activity
+        |> List.map (fun events -> events |> StableGraphLayout.RemoveDirectRepetitions (fun a b -> a.Activity = b.Activity)) // Remove direct repetitions of events with the same activity
+        |> List.map (fun events ->
+            // Add a start and end node for the object type to each trace, if it is specified
+            match objType with
+            | Some objType ->
+                let startEvent = { Activity = $"StartEvent {objType}"; Timestamp = (events |> List.head |> fun e -> e.Timestamp.AddTicks(-1)); OMap = []; VMap = Map.empty }
+                let endEvent = { Activity = $"EndEvent {objType}"; Timestamp = (events |> List.last |> fun e -> e.Timestamp.AddTicks(1)); OMap = []; VMap = Map.empty }
+                startEvent :: events @ [endEvent]
+            | None -> events)
         |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
         |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> StableGraphLayout.SimpleSequence })
 
@@ -291,7 +300,11 @@ type StableGraphLayout private () =
                     | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph components newSeq // Type 6
                     | _ -> graph, components)
 
-        (({ Nodes = []; Edges = [] }, List.empty), variations) ||> List.fold insertSequence |> fst |> normalizeRanks
+        (({ Nodes = []; Edges = [] }, List.empty), variations)
+        ||> List.fold insertSequence
+        |> fst
+        |> normalizeRanks
+        |> fun rg -> { rg with Nodes = rg.Nodes |> List.rev; Edges = rg.Edges |> List.rev }
 
     /// <summary>
     /// Compute a Global Ranking for all activities in an event log, merging the flattened logs of all object types together to get a total view.
@@ -302,8 +315,20 @@ type StableGraphLayout private () =
     static member ComputeGlobalRanking (log: OcelLog) =
         log.ObjectTypes
         |> List.ofSeq
-        |> List.map (fun t -> OcelHelpers.Flatten log t |> StableGraphLayout.VariationsInLog)
+        |> List.map (fun t -> OcelHelpers.Flatten log t |> StableGraphLayout.VariationsInLog (Some t))
         |> List.concat
+        |> List.sortByDescending StableGraphLayout.ImportanceSort
+        |> StableGraphLayout.ComputeGlobalRankingForVariations
+
+    /// <summary>
+    /// Compute a Global Ranking for all activities in an event log, flattening for a specific object type.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
+    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
+    /// </summary>
+    static member ComputeGlobalRankingForObjectType (log: OcelLog) objectType =
+        OcelHelpers.Flatten log objectType
+        |> StableGraphLayout.VariationsInLog None
         |> List.sortByDescending StableGraphLayout.ImportanceSort
         |> StableGraphLayout.ComputeGlobalRankingForVariations
 
@@ -314,11 +339,10 @@ type StableGraphLayout private () =
     /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
     /// </summary>
     static member ComputeGlobalRankingForEachObjectType (log: OcelLog) =
-        log.ObjectTypes
-        |> Seq.map (fun t -> t, OcelHelpers.Flatten log t)
-        |> Map.ofSeq
-        |> Map.map (fun _ flattenedLog -> StableGraphLayout.VariationsInLog flattenedLog |> List.sortByDescending StableGraphLayout.ImportanceSort)
-        |> Map.map (fun _ variations -> StableGraphLayout.ComputeGlobalRankingForVariations variations)
+        log.ObjectTypes |> Seq.map (fun ot -> ot, StableGraphLayout.ComputeGlobalRankingForObjectType log ot) |> Map.ofSeq
+
+    static member ComputeGlobalOrder (rg: GlobalRankGraph) =
+        rg
 
     /// <summary>
     /// Compute a stable graph layout for the discovered graph.
