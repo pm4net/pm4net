@@ -156,6 +156,15 @@ type StableGraphLayout private () =
                     else graph
                 )
 
+            /// Merge two previously unconnected components together (Algorithm 2 from Mennens 2018)
+            let mergeComponents rankGraph (components: Set<string> list) a b offset =
+                let rankA = rankOfNode rankGraph a
+                let rankB = rankOfNode rankGraph b
+                let dist = rankA - rankB + offset
+                let rankGraph = (rankGraph, components[b |> findContainingComponentIndex components]) ||> Set.fold (fun graph node ->
+                    updateNode graph node ((rankOfNode graph node) + dist))
+                rankGraph, components
+
             /// Add a new edge to the rank graph, updating the the connected components. Excepts nodes of wedges to already exist, so always add nodes before edges!
             let addEdge rankGraph components edge =
                 // If the edge connects two disjoint sets, merge them together
@@ -218,11 +227,9 @@ type StableGraphLayout private () =
                     | aIdx, bIdx when aIdx = bIdx ->
                         // Part of the same component, so allow backwards edge
                         ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
-                    | _, bIdx ->
+                    | _ ->
                         // Edge connects two previously unconnected components, so shift component B down to create forward edge (Algorithm 2 from Mennens 2018)
-                        let dist = rankA - rankB + 1
-                        let rankGraph = (rankGraph, components[bIdx]) ||> Set.fold (fun graph node ->
-                            updateNode graph node ((rankOfNode graph node) + dist))
+                        let rankGraph, components = mergeComponents rankGraph components a b 1
                         ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
                 | _ -> rankGraph, components // Impossible, but to silence about incomplete pattern matching due to when expressions
 
@@ -232,13 +239,13 @@ type StableGraphLayout private () =
                 let (y, v) = match seq |> List.last with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Last element must be an edge", nameof seq) |> raise
                 let compU, compV = findContainingComponentIndex components u, findContainingComponentIndex components v
                 let rankU, rankV = rankOfNode rankGraph u, rankOfNode rankGraph v
+                let noOfNodes = seq |> List.choose (fun s -> match s with | Node n, _ -> Some n | _ -> None) |> List.distinct |> List.length
 
                 // Decide what to do based on how the sequence fits into the existing graph
                 if compU <> compV then
+                    let rankGraph, components = mergeComponents rankGraph components u v (noOfNodes + 1)
                     insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankU + 1) seq
-                    // TODO: Merge components
                 else
-                    let noOfNodes = seq |> List.choose (fun s -> match s with | Node n, _ -> Some n | _ -> None) |> List.distinct |> List.length
                     if rankU <= rankV then
                         let rankGraph, components = insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankU + 1) seq
                         let freeRanks = rankV - rankU - 1
