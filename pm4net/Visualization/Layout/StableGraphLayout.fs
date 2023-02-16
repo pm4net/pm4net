@@ -290,14 +290,14 @@ type StableGraphLayout private () =
             // Insert the new sequence elements into the global rank graph according to the techniques for the different types of sequences in Mennens 2018
             ((rankGraph, components), newSeqs) ||> List.fold (fun (graph, components) newSeq ->
                 match newSeq with
-                | [Node _, _] -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankGraph |> lowestRank) newSeq // Type 1
-                | [Edge (a, b), freq] -> insertSingleEdge rankGraph components (a, b, freq) // Type 2
+                | [Node _, _] -> insertSequenceIntoGraph (fun r -> r + 1) graph components (graph |> lowestRank) newSeq // Type 1
+                | [Edge (a, b), freq] -> insertSingleEdge graph components (a, b, freq) // Type 2
                 | _ ->
                     match newSeq, newSeq |> List.rev |> List.head with
-                    | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) rankGraph components ((dest |> rankOfNode rankGraph) - 1) (newSeq |> List.rev) // Type 3
-                    | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components ((orig |> rankOfNode rankGraph) + 1) newSeq // Type 4
-                    | (Node _, _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankGraph |> lowestRank) newSeq // Type 5
-                    | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph components newSeq // Type 6
+                    | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) graph components ((dest |> rankOfNode graph) - 1) (newSeq |> List.rev) // Type 3
+                    | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) graph components ((orig |> rankOfNode graph) + 1) newSeq // Type 4
+                    | (Node _, _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) graph components (graph |> lowestRank) newSeq // Type 5
+                    | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge graph components newSeq // Type 6
                     | _ -> graph, components)
 
         (({ Nodes = []; Edges = [] }, List.empty), variations)

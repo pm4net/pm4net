@@ -4,6 +4,7 @@ open OCEL
 open pm4net.Types.Dfg
 open pm4net.Visualization.Layout
 
+open System.Collections.Generic
 open System.IO
 open Xunit
 
@@ -19,7 +20,7 @@ module StableGraphLayoutTests =
         let log = OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
         let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        gr |> Map.forall (fun _ v -> globalRankValid v) |> Assert.True
+        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> globalRankValid |> Assert.True))
 
     [<Fact>]
     let ``Can discover stable graph layout from Blazor log`` () =
@@ -34,7 +35,7 @@ module StableGraphLayoutTests =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
         let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        gr |> Map.forall (fun _ v -> globalRankValid v) |> Assert.True
+        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> globalRankValid |> Assert.True))
 
     [<Fact>]
     let ``Can discover stable graph layout from 'GitHub pm4py' log`` () =
@@ -48,7 +49,7 @@ module StableGraphLayoutTests =
         let json = File.ReadAllText("recruiting.jsonocel")
         let log = OcelJson.deserialize true json
         let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        gr |> Map.forall (fun _ v -> globalRankValid v) |> Assert.True
+        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> globalRankValid |> Assert.True))
 
     [<Fact>]
     let ``Can discover stable graph layout from 'recruiting' log`` () =
