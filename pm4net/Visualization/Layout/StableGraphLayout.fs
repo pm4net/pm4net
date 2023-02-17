@@ -22,7 +22,7 @@ type private Variation<'a, 'b> = {
 
 /// Types of nodes that can be found in a node sequence graph
 type SequenceNode =
-    | Real of Name: string * Rank: int * DiscoveryIndex: int
+    | Real of Rank: int * DiscoveryIndex: int * Name: string
     | Virtual of Rank: int * DiscoveryIndex: int
 
 /// An undirected graph that represents the node sequence graph of a given rank graph and skeleton (data structure is technically directed, but use edges as two-way connections)
@@ -331,34 +331,50 @@ type StableGraphLayout private () =
     /// Compute a global order given a global rank graph and the process skeleton
     static member ComputeNodeSequenceGraph (rg: GlobalRankGraph) (skeleton: (SequenceElement<string> * int) list list) : NodeSequenceGraph =
 
-        /// Try to find a real node by its node name in a node sequence graph
-        let tryFindRealNode (nsg: NodeSequenceGraph) (node: string) =
-            nsg.Nodes |> List.tryFind (fun n -> match n with | Real(name, _, _) -> name = node | _ -> false)
+        /// Try to find a real or virtual node by its rank and discovery index in a node sequence graph (NSG)
+        let tryFindNode (nsg: NodeSequenceGraph) rank discoveryIndex =
+            nsg.Nodes |> List.tryFind (fun n ->
+                match n with
+                | Real(r, idx, _) -> r = rank && idx = discoveryIndex
+                | Virtual(r, idx) -> r = rank && idx = discoveryIndex
+            )
+
+        /// Add a real node to the node sequence graph (NSG) if it doesn't already exist, and add the updated NSG and the real node
+        let addNodeIfNotExists (nsg: NodeSequenceGraph) rank discoveryIndex name =
+            match tryFindNode nsg rank discoveryIndex with
+            | Some node -> nsg, node
+            | None ->
+                let node = Real(rank, discoveryIndex, name)
+                { nsg with Nodes = node :: nsg.Nodes }, node
+
+        /// Try to find an edge between two nodes, disregarding the direction of the edge
+        let tryFindEdge (nsg: NodeSequenceGraph) nodeA nodeB =
+            nsg.Edges |> List.tryFind (fun (a, b) -> a = nodeA && b = nodeB || a = nodeB && b = nodeA)
+
+        /// Add an edge between two nodes if it doesn't already exist, disregarding edge direction
+        let addEdgeIfNotExists (nsg: NodeSequenceGraph) nodeA nodeB =
+            match tryFindEdge nsg nodeA nodeB with
+            | Some _ -> nsg
+            | None -> { nsg with Edges = (nodeA, nodeB) :: nsg.Edges }
 
         (({ Nodes = []; Edges = [] }: DirectedGraph<_>), skeleton |> List.indexed) ||> List.fold (fun nsg (idx, seq) ->
-            // Partition elements into nodes and edges
-            let (nodes, edges) = seq |> List.partition (fun elem -> match elem with | Node _, _ -> true | _ -> false)
-
-            // Add nodes first
-            let nsg = (nsg, nodes) ||> List.fold (fun nsg elem ->
-                match elem with
-                | Node node, rank ->
-                    let realNode = Real(node, StableGraphLayout.rankOfNode rg node, idx)
-                    if nsg.Nodes |> List.contains realNode then nsg else { nsg with Nodes = realNode :: nsg.Nodes }
-                | _ -> nsg)
-
-            // Now add edges
-            (nsg, edges) ||> List.fold (fun nsg elem ->
-                match elem with
+            let edges = seq |> List.filter (fun elem -> match elem with | Edge _, _ -> true | _ -> false)
+            (nsg, edges) ||> List.fold (fun nsg edge ->
+                match edge with
                 | Edge (a, b), _ ->
-                    // TODO: Create virtual nodes if necessary, and connect them appropriately (consider whether some virtual nodes may already exist, and connect to those instead)
-                    let nodeA, nodeB = tryFindRealNode nsg a, tryFindRealNode nsg b
+                    // Find the ranks of A and B in the global rank graph, and the existing nodes, if any
                     let rankA, rankB = StableGraphLayout.rankOfNode rg a, StableGraphLayout.rankOfNode rg b
-                    if abs(rankA - rankB) > 1 then
-                        nsg // TODO: If spanning multiple ranks, also insert virtual nodes along the way
-                    else
-                        nsg
-                | _ -> nsg)
+
+                    // Add the real nodes of the edge origin and destination if they don't already exist
+                    let nsg, nodeA = addNodeIfNotExists nsg rankA idx a
+                    let nsg, nodeB = addNodeIfNotExists nsg rankB idx b
+
+                    // If the nodes are on neighboring ranks, we can simply add the node (if it doesn't already exist). Otherwise, we have to add virtual nodes in between.
+                    match abs(rankA - rankB) with
+                    | 1 -> addEdgeIfNotExists nsg nodeA nodeB
+                    | dist -> nsg
+                | _ -> nsg
+            )
         )
 
     /// <summary>
