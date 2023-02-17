@@ -8,7 +8,7 @@ open System.Collections.Generic
 open System.IO
 open Xunit
 
-module StableGraphLayoutTests =
+module Assertions =
 
     /// Tests whether the global ranking graph is valid
     let globalRankValid (gr: GlobalRankGraph) =
@@ -32,46 +32,62 @@ module StableGraphLayoutTests =
     let assertGraphMap gr =
         Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> fst |> assertGlobalRank))
 
-    [<Fact>]
-    let ``Can discover stable graph layout from Blazor log for each object type`` () =
-        let json = File.ReadAllText("blazor-logs.jsonocel")
-        let log = OcelJson.deserialize true json
-        let log = log.MergeDuplicateObjects()
-        let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        assertGraphMap gr
+module ``Stable graph layout tests`` =
 
-    [<Fact>]
-    let ``Can discover stable graph layout from Blazor log`` () =
-        let json = File.ReadAllText("blazor-logs.jsonocel")
-        let log = OcelJson.deserialize true json
-        let log = log.MergeDuplicateObjects()
-        let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
-        assertGlobalRank gr
+    module ``For each object type`` =
 
-    [<Fact>]
-    let ``Can discover stable graph layout from 'GitHub pm4py' log for each object type`` () =
-        let json = File.ReadAllText("github_pm4py.jsonocel")
-        let log = OcelJson.deserialize true json
-        let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        assertGraphMap gr
+        [<Fact>]
+        let ``Can discover stable graph layout from Blazor log for each object type`` () =
+            let json = File.ReadAllText("blazor-logs.jsonocel")
+            let log = OcelJson.deserialize true json
+            let log = log.MergeDuplicateObjects()
+            let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
+            Assertions.assertGraphMap gr
 
-    [<Fact>]
-    let ``Can discover stable graph layout from 'GitHub pm4py' log`` () =
-        let json = File.ReadAllText("github_pm4py.jsonocel")
-        let log = OcelJson.deserialize true json
-        let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
-        assertGlobalRank gr
+        [<Fact>]
+        let ``Can discover stable graph layout from 'GitHub pm4py' log for each object type`` () =
+            let json = File.ReadAllText("github_pm4py.jsonocel")
+            let log = OcelJson.deserialize true json
+            let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
+            Assertions.assertGraphMap gr
 
-    [<Fact>]
-    let ``Can discover stable graph layout from 'recruiting' log for each object type`` () =
-        let json = File.ReadAllText("recruiting.jsonocel")
-        let log = OcelJson.deserialize true json
-        let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        assertGraphMap gr
+        [<Fact>]
+        let ``Can discover stable graph layout from 'GitHub pm4py' log`` () =
+            let json = File.ReadAllText("github_pm4py.jsonocel")
+            let log = OcelJson.deserialize true json
+            let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
+            Assertions.assertGlobalRank gr
 
-    [<Fact>]
-    let ``Can discover stable graph layout from 'recruiting' log`` () =
-        let json = File.ReadAllText("recruiting.jsonocel")
-        let log = OcelJson.deserialize true json
-        let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
-        assertGlobalRank gr
+    module ``Combine all object types`` =
+
+        [<Fact>]
+        let ``Can discover stable graph layout from Blazor log`` () =
+            let json = File.ReadAllText("blazor-logs.jsonocel")
+            let log = OcelJson.deserialize true json
+            let log = log.MergeDuplicateObjects()
+            let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
+            Assertions.assertGlobalRank gr
+
+        [<Fact>]
+        let ``Can discover stable graph layout from 'recruiting' log for each object type`` () =
+            let json = File.ReadAllText("recruiting.jsonocel")
+            let log = OcelJson.deserialize true json
+            let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
+            Assertions.assertGraphMap gr
+
+        [<Fact>]
+        let ``Can discover stable graph layout from 'recruiting' log`` () =
+            let json = File.ReadAllText("recruiting.jsonocel")
+            let log = OcelJson.deserialize true json
+            let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
+            Assertions.assertGlobalRank gr
+
+    module ``Node sequence graph`` =
+
+        [<Fact>]
+        let ``Can discover stable graph layout from 'GitHub pm4py' log for each object type`` () =
+            let json = File.ReadAllText("github_pm4py.jsonocel")
+            let log = OcelJson.deserialize true json
+            let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
+            let nsg = StableGraphLayout.ComputeNodeSequenceGraph gr skeleton
+            nsg |> Assert.NotNull
