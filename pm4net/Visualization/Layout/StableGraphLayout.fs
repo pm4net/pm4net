@@ -136,7 +136,7 @@ type StableGraphLayout private () =
                 { graph with Edges = graph.Edges |> List.updateAt idx (a, b, existingFreq + freqToIncrement) })
 
         /// Insert a sequence of edges and nodes that have not been seen before in the graph
-        let insertSequence graph components sequence =
+        let insertSequence rankGraph components sequence =
 
             /// Get the lowest rank encountered so far for any node
             let lowestRank rankGraph =
@@ -288,29 +288,33 @@ type StableGraphLayout private () =
                         else rankGraph, components
 
             match sequence with
-            | [Node _, _] -> insertSequenceIntoGraph (fun r -> r + 1) graph components (graph |> lowestRank) sequence // Type 1
-            | [Edge (a, b), freq] -> insertSingleEdge graph components (a, b, freq) // Type 2
+            | [Node _, _] -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankGraph |> lowestRank) sequence // Type 1
+            | [Edge (a, b), freq] -> insertSingleEdge rankGraph components (a, b, freq) // Type 2
             | _ ->
                 match sequence, sequence |> List.rev |> List.head with
-                | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) graph components ((dest |> rankOfNode graph) - 1) (sequence |> List.rev) // Type 3
-                | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) graph components ((orig |> rankOfNode graph) + 1) sequence // Type 4
-                | (Node _, _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) graph components (graph |> lowestRank) sequence // Type 5
-                | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge graph components sequence // Type 6
-                | _ -> graph, components
+                | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) rankGraph components ((dest |> rankOfNode rankGraph) - 1) (sequence |> List.rev) // Type 3
+                | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components ((orig |> rankOfNode rankGraph) + 1) sequence // Type 4
+                | (Node _, _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankGraph |> lowestRank) sequence // Type 5
+                | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph components sequence // Type 6
+                | _ -> rankGraph, components
+
+        /// Process a variation until no more new sequences can be added to the rank graph
+        let rec processVariation variation skeleton (rankGraph, components) =
+            match (rankGraph, variation) ||> StableGraphLayout.NewSequences with
+            | [] -> rankGraph, components, skeleton
+            | seq :: _ ->
+                // Insert the first found new sequence into the graph
+                let rankGraph, components = seq |> insertSequence rankGraph components
+                // Add the sequence to the skeleton if it contains at least one node (Definition 4.2.1 of Mennens 2018)
+                let skeleton = if seq |> List.exists (fun elem -> match elem with | Node _, _ -> true | _ -> false) then skeleton @ [seq] else skeleton
+                // Process the variation again until there are no more new sequences available in the variation
+                (rankGraph, components) |> processVariation variation skeleton
 
         let rankGraph, _, skeleton =
             (({ Nodes = []; Edges = [] }, [], []), variations)
             ||> List.fold (fun (graph, components, skeleton) variation ->
-                // Update the frequencies of edges in the graph that are not new, but appear in the variation
                 let graph = updateAlreadyKnownEdges graph variation
-                // Discover the never-seen-before sequences in the variation, if any
-                let newSequences = StableGraphLayout.NewSequences graph variation
-                // Insert the newly discovered sequences into the rank graph, shifting and merging nodes where required 
-                let graph, components = ((graph, components), newSequences) ||> List.fold (fun (graph, components) seq -> insertSequence graph components seq)
-                // Only sequences with at least one node are considered part of the skeleton (Definition 4.2.1 of Mennens 2018)
-                let skeletonSeqs = newSequences |> List.filter (fun s -> s |> List.exists (fun e -> match e with | Node _, _ -> true | _ -> false))
-                // Return the updated state consisting of updated rank graph, components, and new sequences for the skeleton
-                graph, components, (skeleton @ skeletonSeqs))
+                (graph, components) |> processVariation variation skeleton)
 
         rankGraph |> normalizeRanks |> reverseNodeAndEdgeOrder, skeleton
 
