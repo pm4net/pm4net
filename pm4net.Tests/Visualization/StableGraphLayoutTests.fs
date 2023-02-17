@@ -20,14 +20,14 @@ module StableGraphLayoutTests =
         let log = OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
         let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> globalRankValid |> Assert.True))
+        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> fst |> globalRankValid |> Assert.True))
 
     [<Fact>]
     let ``Can discover stable graph layout from Blazor log`` () =
         let json = File.ReadAllText("blazor-logs.jsonocel")
         let log = OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
-        let gr = StableGraphLayout.ComputeGlobalRanking log
+        let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
         gr |> globalRankValid |> Assert.True
 
     [<Fact>]
@@ -35,13 +35,13 @@ module StableGraphLayoutTests =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
         let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> globalRankValid |> Assert.True))
+        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> fst |> globalRankValid |> Assert.True))
 
     [<Fact>]
     let ``Can discover stable graph layout from 'GitHub pm4py' log`` () =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
-        let gr = StableGraphLayout.ComputeGlobalRanking log
+        let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
         gr |> globalRankValid |> Assert.True
 
     [<Fact>]
@@ -49,11 +49,11 @@ module StableGraphLayoutTests =
         let json = File.ReadAllText("recruiting.jsonocel")
         let log = OcelJson.deserialize true json
         let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> globalRankValid |> Assert.True))
+        Assert.All(gr, System.Action<KeyValuePair<_, _>>(fun kv -> kv.Value |> fst |> globalRankValid |> Assert.True))
 
     [<Fact>]
     let ``Can discover stable graph layout from 'recruiting' log`` () =
         let json = File.ReadAllText("recruiting.jsonocel")
         let log = OcelJson.deserialize true json
-        let gr = StableGraphLayout.ComputeGlobalRanking log
+        let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
         gr |> globalRankValid|> Assert.True

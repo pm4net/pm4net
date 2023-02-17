@@ -9,7 +9,7 @@ open pm4net.Utilities
 type GlobalRankGraph = DirectedGraph<string * int, int>
 
 /// Type to represent a sequence of nodes and edges, where an edge consists of two nodes
-type private SequenceElement<'a> =
+type SequenceElement<'a> =
     | Node of 'a
     | Edge of 'a * 'a
 
@@ -67,6 +67,36 @@ type StableGraphLayout private () =
         |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
         |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> StableGraphLayout.SimpleSequence })
 
+    /// Extract all continuous sequences that only contain nodes and/or edges that are not yet in the rank graph (Mennens 2019, Section 3.1.1)
+    /// Uses sequence to efficiently access last element when adding new items to the last sequence.
+    static member private NewSequences rankGraph variation =
+        // For each sequence element, find out whether it already exists in the global rank graph.
+        // If it does not, the element and subsequent elements form a new sequence that will be added to the graph.
+        // If it does already exist, increment the frequency of the edge elements by the frequency of the new edge sequence.
+        let partition =
+            variation.Sequence
+            |> List.indexed
+            |> List.map (fun (idx, elem) ->
+                match elem with
+                | Node n, _ -> idx, rankGraph.Nodes |> List.exists (fun (act, _) -> act = n)
+                | Edge (a, b), _ -> idx, rankGraph.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
+
+        // Build the initial state of the folder by adding the first sequence element when it is new, otherwise an empty list
+        let initialState = if partition |> List.head |> snd |> not then variation.Sequence[partition |> List.head |> fst] |> List.singleton |> List.singleton else [[]]
+        (initialState, partition |> List.pairwise) ||> List.fold (fun state (last, current) ->
+            // Fold over the list of sequences, and determine whether a new sequence needs to be started based on the info about the last element
+            match last, current with
+            | (_, true), (_, false) ->
+                // Add a new sequence with the only element being the current element
+                variation.Sequence[fst current] |> List.singleton |> List.singleton |> List.append state
+            | (_, false), (_, false) ->
+                // Append to the last sequence because the last element was new
+                let lastIdx = List.length state - 1
+                let updatedSeq = variation.Sequence[fst current] |> List.singleton |> List.append (state |> List.last)
+                state |> List.updateAt lastIdx updatedSeq
+            | _ -> state
+        ) |> List.filter (fun l -> l |> List.isEmpty |> not)
+
     /// Compute a global ranking for a list of variations, according to the Algorithm from Mennens 2018 & 2019
     static member private ComputeGlobalRankingForVariations variations =
 
@@ -81,14 +111,32 @@ type StableGraphLayout private () =
             }
 
         /// Normalize the ranks of a rank graph so that the first node is always on rank 0 (can become negative during processing)
-        let normalizeRanks (rankGraph: GlobalRankGraph) =
+        let normalizeRanks rankGraph =
             let lowestRank = rankGraph.Nodes |> List.minBy snd |> snd
             if lowestRank <> 0 then
                 (rankGraph, rankGraph.Nodes) ||> List.fold (fun graph (node, rank) -> updateNode graph node (rank - lowestRank))
             else rankGraph
 
-        /// Insert a new variation into an existing global rank graph
-        let insertSequence (rankGraph, components) variation =
+        /// Reverse the order of nodes and edges in the graph, as they are added to the beginning of the list when discovering (purely for intuitiveness)
+        let reverseNodeAndEdgeOrder rankGraph =
+            { rankGraph with Nodes = rankGraph.Nodes |> List.rev; Edges = rankGraph.Edges |> List.rev }
+
+        /// Update the edges that are already in the graph, but occur in the new variation, by incrementing their frequencies with that of the variation
+        let updateAlreadyKnownEdges rankGraph variation =
+            let alreadyKnownEdges = variation.Sequence |> List.choose (fun se ->
+                match se with
+                | Edge(a, b), freq ->
+                    match rankGraph.Edges |> List.tryFindIndex (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) with
+                    | Some idx -> Some (idx, freq)
+                    | _ -> None
+                | _ -> None)
+
+            (rankGraph, alreadyKnownEdges) ||> List.fold (fun graph (idx, freqToIncrement) ->
+                let (a, b, existingFreq) = graph.Edges[idx]
+                { graph with Edges = graph.Edges |> List.updateAt idx (a, b, existingFreq + freqToIncrement) })
+
+        /// Insert a sequence of edges and nodes that have not been seen before in the graph
+        let insertSequence graph components sequence =
 
             /// Get the lowest rank encountered so far for any node
             let lowestRank rankGraph =
@@ -239,72 +287,32 @@ type StableGraphLayout private () =
                             shiftNodes rankGraph v y (rankV - rankOfNode rankGraph y + 1), components
                         else rankGraph, components
 
-            /// Extract all continuous sequences that only contain nodes and/or edges that are not yet in the rank graph (Mennens 2019, Section 3.1.1)
-            /// Uses sequence to efficiently access last element when adding new items to the last sequence.
-            let newSequence rankGraph variation =
-                // For each sequence element, find out whether it already exists in the global rank graph.
-                // If it does not, the element and subsequent elements form a new sequence that will be added to the graph.
-                // If it does already exist, increment the frequency of the edge elements by the frequency of the new edge sequence.
-                let partition =
-                    variation.Sequence
-                    |> List.indexed
-                    |> List.map (fun (idx, elem) ->
-                        match elem with
-                        | Node n, _ -> idx, rankGraph.Nodes |> List.exists (fun (act, _) -> act = n)
-                        | Edge (a, b), _ -> idx, rankGraph.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
+            match sequence with
+            | [Node _, _] -> insertSequenceIntoGraph (fun r -> r + 1) graph components (graph |> lowestRank) sequence // Type 1
+            | [Edge (a, b), freq] -> insertSingleEdge graph components (a, b, freq) // Type 2
+            | _ ->
+                match sequence, sequence |> List.rev |> List.head with
+                | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) graph components ((dest |> rankOfNode graph) - 1) (sequence |> List.rev) // Type 3
+                | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) graph components ((orig |> rankOfNode graph) + 1) sequence // Type 4
+                | (Node _, _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) graph components (graph |> lowestRank) sequence // Type 5
+                | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge graph components sequence // Type 6
+                | _ -> graph, components
 
-                // Build the initial state of the folder by adding the first sequence element when it is new, otherwise an empty list
-                let initialState = if partition |> List.head |> snd |> not then variation.Sequence[partition |> List.head |> fst] |> List.singleton |> List.singleton else [[]]
-                (initialState, partition |> List.pairwise) ||> List.fold (fun state (last, current) ->
-                    // Fold over the list of sequences, and determine whether a new sequence needs to be started based on the info about the last element
-                    match last, current with
-                    | (_, true), (_, false) ->
-                        // Add a new sequence with the only element being the current element
-                        variation.Sequence[fst current] |> List.singleton |> List.singleton |> List.append state
-                    | (_, false), (_, false) ->
-                        // Append to the last sequence because the last element was new
-                        let lastIdx = List.length state - 1
-                        let updatedSeq = variation.Sequence[fst current] |> List.singleton |> List.append (state |> List.last)
-                        state |> List.updateAt lastIdx updatedSeq
-                    | _ -> state
-                ) |> List.filter (fun l -> l |> List.isEmpty |> not)
+        let rankGraph, _, skeleton =
+            (({ Nodes = []; Edges = [] }, [], []), variations)
+            ||> List.fold (fun (graph, components, skeleton) variation ->
+                // Update the frequencies of edges in the graph that are not new, but appear in the variation
+                let graph = updateAlreadyKnownEdges graph variation
+                // Discover the never-seen-before sequences in the variation, if any
+                let newSequences = StableGraphLayout.NewSequences graph variation
+                // Insert the newly discovered sequences into the rank graph, shifting and merging nodes where required 
+                let graph, components = ((graph, components), newSequences) ||> List.fold (fun (graph, components) seq -> insertSequence graph components seq)
+                // Only sequences with at least one node are considered part of the skeleton (Definition 4.2.1 of Mennens 2018)
+                let skeletonSeqs = newSequences |> List.filter (fun s -> s |> List.exists (fun e -> match e with | Node _, _ -> true | _ -> false))
+                // Return the updated state consisting of updated rank graph, components, and new sequences for the skeleton
+                graph, components, (skeleton @ skeletonSeqs))
 
-            // Get the new sequences that have not been added to the global rank graph yet
-            let newSeqs = newSequence rankGraph variation |> Seq.map List.ofSeq |> List.ofSeq
-
-            // Get the edges that are already in the graph, so that the frequencies can be incremented (returns only index of edge and frequency to add)
-            let alreadyKnownEdges = variation.Sequence |> List.choose (fun se ->
-                match se with
-                | Edge(a, b), freq ->
-                    match rankGraph.Edges |> List.tryFindIndex (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) with
-                    | Some idx -> Some (idx, freq)
-                    | _ -> None
-                | _ -> None)
-
-            // Update the global rank graph with the frequencies of edges that are not new but appear in variation
-            let rankGraph = (rankGraph, alreadyKnownEdges) ||> List.fold (fun graph (idx, freqToIncrement) ->
-                let (a, b, existingFreq) = graph.Edges[idx]
-                { graph with Edges = graph.Edges |> List.updateAt idx (a, b, existingFreq + freqToIncrement) }
-            )
-
-            // Insert the new sequence elements into the global rank graph according to the techniques for the different types of sequences in Mennens 2018
-            ((rankGraph, components), newSeqs) ||> List.fold (fun (graph, components) newSeq ->
-                match newSeq with
-                | [Node _, _] -> insertSequenceIntoGraph (fun r -> r + 1) graph components (graph |> lowestRank) newSeq // Type 1
-                | [Edge (a, b), freq] -> insertSingleEdge graph components (a, b, freq) // Type 2
-                | _ ->
-                    match newSeq, newSeq |> List.rev |> List.head with
-                    | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) graph components ((dest |> rankOfNode graph) - 1) (newSeq |> List.rev) // Type 3
-                    | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) graph components ((orig |> rankOfNode graph) + 1) newSeq // Type 4
-                    | (Node _, _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) graph components (graph |> lowestRank) newSeq // Type 5
-                    | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge graph components newSeq // Type 6
-                    | _ -> graph, components)
-
-        (({ Nodes = []; Edges = [] }, List.empty), variations)
-        ||> List.fold insertSequence
-        |> fst
-        |> normalizeRanks
-        |> fun rg -> { rg with Nodes = rg.Nodes |> List.rev; Edges = rg.Edges |> List.rev }
+        rankGraph |> normalizeRanks |> reverseNodeAndEdgeOrder, skeleton
 
     /// <summary>
     /// Compute a Global Ranking for all activities in an event log, merging the flattened logs of all object types together to get a total view.
