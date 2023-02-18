@@ -85,7 +85,7 @@ module ``Stable graph layout tests`` =
     module ``Node sequence graph`` =
 
         [<Fact>]
-        let ``Can discover stable graph layout from 'GitHub pm4py' log for each object type`` () =
+        let ``Can discover node sequence graph from 'GitHub pm4py' log`` () =
             let json = File.ReadAllText("github_pm4py.jsonocel")
             let log = OcelJson.deserialize true json
             let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
