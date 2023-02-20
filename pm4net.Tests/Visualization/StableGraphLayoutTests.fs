@@ -89,5 +89,5 @@ module ``Stable graph layout tests`` =
             let json = File.ReadAllText("github_pm4py.jsonocel")
             let log = OcelJson.deserialize true json
             let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
-            let nsg = StableGraphLayout.ComputeNodeSequenceGraph gr skeleton
+            let nsg = StableGraphLayout.computeNodeSequenceGraph gr skeleton
             nsg |> Assert.NotNull

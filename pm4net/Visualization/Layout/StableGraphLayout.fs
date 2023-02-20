@@ -1,9 +1,13 @@
 namespace pm4net.Visualization.Layout
 
+open System.Runtime.CompilerServices
 open OCEL.Types
 open pm4net.Types
 open pm4net.Types.Dfg
 open pm4net.Utilities
+
+[<assembly: InternalsVisibleTo("pm4net.Tests")>]
+do()
 
 /// A directed graph that represents the global rank graph. Nodes consist of activity name and rank, and edges store their frequency.
 type GlobalRankGraph = DirectedGraph<string * int, int>
@@ -14,31 +18,31 @@ type SequenceElement<'a> =
     | Edge of 'a * 'a
 
 /// Type to represent a variation of a trace, with all its events, a sequence of nodes and edges, and the frequency of the variation
-type private Variation<'a, 'b> = {
+type internal Variation<'a, 'b> = {
     Events: 'a list
     Sequence: (SequenceElement<'a> * 'b) list
     Frequency: int
 }
 
 /// Types of nodes that can be found in a node sequence graph
-type SequenceNode =
+type internal SequenceNode =
     | Real of Rank: int * DiscoveryIndex: int * Name: string
     | Virtual of Rank: int * DiscoveryIndex: int
 
 /// An undirected graph that represents the node sequence graph of a given rank graph and skeleton (data structure is technically directed, but use edges as two-way connections)
-type NodeSequenceGraph = DirectedGraph<SequenceNode>
+type internal NodeSequenceGraph = DirectedGraph<SequenceNode>
 
 [<AbstractClass; Sealed>]
 type StableGraphLayout private () =
 
     /// Sort traces based on their importance (sum of w^2 * |v|^2)
-    static member private importanceSort variation =
+    static member internal importanceSort variation =
         let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0 | Edge _, freq -> pown freq 2)
         let vLenSquared = pown variation.Events.Length 2
         wSquaredSum * vLenSquared
 
     /// Compute the sequence of a trace, not accounting for the existing global rank graph (interleaved nodes and edges) (Definition 4.1.2 of Mennes 2018)
-    static member private simpleSequence freq trace =
+    static member internal simpleSequence freq trace =
         match trace with
         | [] -> []
         | [single] -> [Node(single), freq]
@@ -52,14 +56,14 @@ type StableGraphLayout private () =
             |> List.concat
 
     /// Removes direct repetitions in a list (e.g. [A,A,B,C,C] -> [A,B,C]). Section 2.1 of Mennens 2018.
-    static member private removeDirectRepetitions comparer trace =
+    static member internal removeDirectRepetitions comparer trace =
         ([], trace) ||> List.fold (fun state nextValue ->
             match state |> List.tryLast with
             | None -> [nextValue]
             | Some last -> if comparer last nextValue then state else state @ [nextValue])
 
     /// Extract the unique variations in the flattened log and order them by importance
-    static member private variationsInLog objType log =
+    static member internal variationsInLog objType log =
         log
         |> OcelHelpers.OrderedTracesOfFlattenedLog // Get traces based on referenced object
         |> Helpers.mapNestedList snd // Discard the event ID as it is not relevant
@@ -76,7 +80,7 @@ type StableGraphLayout private () =
         |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> StableGraphLayout.simpleSequence })
 
     /// Extract a new continuous sequence that only contains nodes and/or edges that are not yet in the rank graph. Stops when duplicates are encountered. (Mennens 2019, Section 3.1.1)
-    static member private newSequence rankGraph variation =
+    static member internal newSequence rankGraph variation =
 
         /// Checks whether a given sequence element is already in the rank graph
         let existsInRankGraph rg = function
@@ -98,11 +102,11 @@ type StableGraphLayout private () =
         | Some idx -> ([], Set.empty, variation.Sequence |> List.skip idx) |||> addUntilDuplicate rankGraph
 
     /// Get the rank of a node with a given name
-    static member private rankOfNode rankGraph node =
+    static member internal rankOfNode rankGraph node =
         rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
 
-    /// Compute a global ranking for a list of variations, according to the Algorithm from Mennens 2018 & 2019
-    static member private computeGlobalRankingForVariations variations =
+    /// Compute a global ranking and process skeleton for a list of variations, according to the Algorithm from Mennens 2018 & 2019
+    static member internal computeGlobalRankingAndSkeletonForVariations variations =
 
         /// Update a node's rank in a rank graph, changing the edges that reference the nodes with it
         let updateNode rankGraph node newRank =
@@ -339,10 +343,10 @@ type StableGraphLayout private () =
         rankGraph |> normalizeRanks |> reverseNodeAndEdgeOrder, skeleton
 
     /// Compute a global order given a global rank graph and the process skeleton
-    static member ComputeNodeSequenceGraph (rg: GlobalRankGraph) (skeleton: (SequenceElement<string> * int) list list) : NodeSequenceGraph =
+    static member internal computeNodeSequenceGraph rg skeleton =
 
         /// Get the discovery index of a sequence node, real or virtual
-        let getDiscoveryIndex (elem: SequenceNode) =
+        let getDiscoveryIndex elem =
             match elem with
             | Real(_, idx, _) -> idx
             | Virtual(_, idx) -> idx
@@ -378,14 +382,14 @@ type StableGraphLayout private () =
                 | _ -> false)
 
         /// Add a virtual node to the NSG, if there isn't already an existing node at this rank with the same discovery index
-        let addVirtualNodeIfNotExists (nsg: NodeSequenceGraph) rank discoveryIndex =
+        let addVirtualNodeIfNotExists nsg rank discoveryIndex =
             let virtualNode = Virtual(rank, discoveryIndex)
             match tryFindNode nsg rank discoveryIndex with
             | Some nodeIndex -> nsg, nsg.Nodes[nodeIndex]
             | None -> { nsg with Nodes = virtualNode :: nsg.Nodes }, virtualNode
 
         /// Add a real node to the NSG, replacing any virtual nodes that may already be there. Also updates any edges that reference the replaced node.
-        let addOrReplaceRealNode (nsg: NodeSequenceGraph) rank discoveryIndex name =
+        let addOrReplaceRealNode nsg rank discoveryIndex name =
             let newNode = Real(rank, discoveryIndex, name)
             match tryFindRealNodeOnRank nsg rank name with
             | Some foundNodeIdx ->
@@ -459,7 +463,7 @@ type StableGraphLayout private () =
         |> List.map (fun t -> OcelHelpers.Flatten log t |> StableGraphLayout.variationsInLog (Some t))
         |> List.concat
         |> List.sortByDescending StableGraphLayout.importanceSort
-        |> StableGraphLayout.computeGlobalRankingForVariations
+        |> StableGraphLayout.computeGlobalRankingAndSkeletonForVariations
 
     /// <summary>
     /// Compute a Global Ranking for all activities in an event log, flattening for a specific object type.
@@ -471,7 +475,7 @@ type StableGraphLayout private () =
         OcelHelpers.Flatten log objectType
         |> StableGraphLayout.variationsInLog None
         |> List.sortByDescending StableGraphLayout.importanceSort
-        |> StableGraphLayout.computeGlobalRankingForVariations
+        |> StableGraphLayout.computeGlobalRankingAndSkeletonForVariations
 
     /// <summary>
     /// Compute a Global Ranking for each object type in an event log.
