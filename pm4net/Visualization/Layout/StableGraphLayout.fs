@@ -341,6 +341,12 @@ type StableGraphLayout private () =
     /// Compute a global order given a global rank graph and the process skeleton
     static member ComputeNodeSequenceGraph (rg: GlobalRankGraph) (skeleton: (SequenceElement<string> * int) list list) : NodeSequenceGraph =
 
+        /// Get the discovery index of a sequence node, real or virtual
+        let getDiscoveryIndex (elem: SequenceNode) =
+            match elem with
+            | Real(_, idx, _) -> idx
+            | Virtual(_, idx) -> idx
+
         /// Try to find an edge between two nodes, disregarding the direction of the edge
         let tryFindEdge (nsg: NodeSequenceGraph) nodeA nodeB =
             nsg.Edges |> List.tryFind (fun (a, b) -> a = nodeA && b = nodeB || a = nodeB && b = nodeA)
@@ -368,7 +374,7 @@ type StableGraphLayout private () =
         let tryFindRealNodeOnRank (nsg: NodeSequenceGraph) rank name =
             nsg.Nodes |> List.tryFindIndex (fun n ->
                 match n with
-                | Real(r, _, name) -> r = rank && name = name
+                | Real(r, _, n) -> r = rank && n = name
                 | _ -> false)
 
         /// Add a virtual node to the NSG, if there isn't already an existing node at this rank with the same discovery index
@@ -410,7 +416,7 @@ type StableGraphLayout private () =
             // When the next rank is already the desired destination, we only have to add an edge between the current rank and the destination
             match nextRank = rankB with
             | false -> addVirtualNodesAndEdgesBetweenRanks nsg nextRank nextNode rankB discoveryIndex // Recursively add virtual nodes and edges until done
-            | _ -> nsg // All done!
+            | _ -> nsg, nextNode // All done!
 
         (({ Nodes = []; Edges = [] }: DirectedGraph<_>), skeleton |> List.indexed) ||> List.fold (fun nsg (idx, seq) ->
             let edges = seq |> List.filter (fun elem -> match elem with | Edge _, _ -> true | _ -> false)
@@ -424,10 +430,19 @@ type StableGraphLayout private () =
                     let nsg, nodeA = addOrReplaceRealNode nsg rankA idx a
                     let nsg, nodeB = addOrReplaceRealNode nsg rankB idx b
 
-                    // If the nodes are on neighboring ranks, we can simply add the edge (if it doesn't already exist). Otherwise, we have to add virtual nodes in between.
+                    // Determine whether the target node is in the same "column", i.e. has the same discovery index. If not, the last edge must merge the connection
+                    let targetA, targetB = getDiscoveryIndex nodeA, getDiscoveryIndex nodeB
+
+                    // Add a connection between the two nodes, and insert virtual nodes where required
                     match abs(rankA - rankB) with
                     | 1 -> addEdgeIfNotExists nsg nodeA nodeB |> fst
-                    | _ -> addVirtualNodesAndEdgesBetweenRanks nsg rankA nodeA rankB idx
+                    | _ ->
+                        match targetA = targetB with
+                        | true -> addVirtualNodesAndEdgesBetweenRanks nsg rankA nodeA rankB idx |> fst
+                        | false ->
+                            // Only add virtual nodes up to the rank just before the target, and then connect it to the actual target node via an edge
+                            let nsg, nodeToConnect = addVirtualNodesAndEdgesBetweenRanks nsg rankA nodeA (if rankA - rankB >= 0 then rankB + 1 else rankB - 1) idx
+                            addEdgeIfNotExists nsg nodeToConnect nodeB |> fst
                 | _ -> nsg
             )
         )
