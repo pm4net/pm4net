@@ -114,12 +114,16 @@ type StableGraphLayout private () =
                 Edges = (rankGraph.Edges, outEdges @ inEdges) ||> List.fold (fun s (i, e) -> s |> List.updateAt i e)
             }
 
-        /// Normalize the ranks of a rank graph so that the first node is always on rank 0 (can become negative during processing)
-        let normalizeRanks rankGraph =
-            let lowestRank = rankGraph.Nodes |> List.minBy snd |> snd
-            if lowestRank <> 0 then
-                (rankGraph, rankGraph.Nodes) ||> List.fold (fun graph (node, rank) -> updateNode graph node (rank - lowestRank))
-            else rankGraph
+        /// Normalize the ranks of a rank graph so that the first node is always on rank 0 (can become negative during processing), and so that there are no gaps in the ranks
+        let normalizeRanks (rankGraph: GlobalRankGraph) =
+            let nodes = rankGraph.Nodes |> List.sortBy snd
+            let currentRank = match nodes |> List.tryHead with | Some(_, r) -> r | _ -> 0
+            ((rankGraph, currentRank, 0), nodes) ||> List.fold (fun (rankGraph, currentRank, targetRank) (node, rank) ->
+                if rank = currentRank then
+                    if rank <> targetRank then updateNode rankGraph node targetRank, currentRank, targetRank
+                    else rankGraph, currentRank, targetRank
+                else updateNode rankGraph node (targetRank + 1), rank, targetRank + 1
+            ) |> fun (rg, _, _) -> rg
 
         /// Reverse the order of nodes and edges in the graph, as they are added to the beginning of the list when discovering (purely for intuitiveness)
         let reverseNodeAndEdgeOrder rankGraph : DirectedGraph<_,_> =
