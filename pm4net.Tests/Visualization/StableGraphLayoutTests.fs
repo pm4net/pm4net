@@ -52,8 +52,8 @@ module ``Stable graph layout tests`` =
             Assertions.assertGraphMap gr
 
         [<Fact>]
-        let ``Can discover stable graph layout from 'GitHub pm4py' log`` () =
-            let json = File.ReadAllText("github_pm4py.jsonocel")
+        let ``Can discover stable graph layout from 'recruiting' log for each object type`` () =
+            let json = File.ReadAllText("recruiting.jsonocel")
             let log = OcelJson.deserialize true json
             let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
             Assertions.assertGlobalRank gr
@@ -69,11 +69,11 @@ module ``Stable graph layout tests`` =
             Assertions.assertGlobalRank gr
 
         [<Fact>]
-        let ``Can discover stable graph layout from 'recruiting' log for each object type`` () =
-            let json = File.ReadAllText("recruiting.jsonocel")
+        let ``Can discover stable graph layout from 'GitHub pm4py' log`` () =
+            let json = File.ReadAllText("github_pm4py.jsonocel")
             let log = OcelJson.deserialize true json
-            let gr = StableGraphLayout.ComputeGlobalRankingForEachObjectType log
-            Assertions.assertGraphMap gr
+            let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
+            Assertions.assertGlobalRank gr
 
         [<Fact>]
         let ``Can discover stable graph layout from 'recruiting' log`` () =

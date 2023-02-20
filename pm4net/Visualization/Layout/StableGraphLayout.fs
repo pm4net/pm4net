@@ -75,35 +75,27 @@ type StableGraphLayout private () =
         |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
         |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> StableGraphLayout.simpleSequence })
 
-    /// Extract all continuous sequences that only contain nodes and/or edges that are not yet in the rank graph (Mennens 2019, Section 3.1.1)
-    /// Uses sequence to efficiently access last element when adding new items to the last sequence.
-    static member private newSequences rankGraph variation =
-        // For each sequence element, find out whether it already exists in the global rank graph.
-        // If it does not, the element and subsequent elements form a new sequence that will be added to the graph.
-        // If it does already exist, increment the frequency of the edge elements by the frequency of the new edge sequence.
-        let partition =
-            variation.Sequence
-            |> List.indexed
-            |> List.map (fun (idx, elem) ->
-                match elem with
-                | Node n, _ -> idx, rankGraph.Nodes |> List.exists (fun (act, _) -> act = n)
-                | Edge (a, b), _ -> idx, rankGraph.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b))
+    /// Extract a new continuous sequence that only contains nodes and/or edges that are not yet in the rank graph. Stops when duplicates are encountered. (Mennens 2019, Section 3.1.1)
+    static member private newSequence rankGraph variation =
 
-        // Build the initial state of the folder by adding the first sequence element when it is new, otherwise an empty list
-        let initialState = if partition |> List.head |> snd |> not then variation.Sequence[partition |> List.head |> fst] |> List.singleton |> List.singleton else [[]]
-        (initialState, partition |> List.pairwise) ||> List.fold (fun state (last, current) ->
-            // Fold over the list of sequences, and determine whether a new sequence needs to be started based on the info about the last element
-            match last, current with
-            | (_, true), (_, false) ->
-                // Add a new sequence with the only element being the current element
-                variation.Sequence[fst current] |> List.singleton |> List.singleton |> List.append state
-            | (_, false), (_, false) ->
-                // Append to the last sequence because the last element was new
-                let lastIdx = List.length state - 1
-                let updatedSeq = variation.Sequence[fst current] |> List.singleton |> List.append (state |> List.last)
-                state |> List.updateAt lastIdx updatedSeq
-            | _ -> state
-        ) |> List.filter (fun l -> l |> List.isEmpty |> not)
+        /// Checks whether a given sequence element is already in the rank graph
+        let existsInRankGraph rg = function
+            | Node n, _ -> rg.Nodes |> List.exists (fun (act, _) -> act = n)
+            | Edge (a, b), _ -> rg.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b)
+
+        /// Add sequence elements until a duplicate is encountered, either already in the rank graph, or in the new sequence
+        let rec addUntilDuplicate rankGraph state (seen: Set<_>) seq =
+            match seq with
+            | [] -> state |> List.rev
+            | elem :: rest ->
+                if elem |> existsInRankGraph rankGraph then state |> List.rev
+                else if elem |> seen.Contains then elem :: state |> List.rev // Add the duplicate element to "complete" sequence, since it's not in rank graph yet
+                else addUntilDuplicate rankGraph (elem :: state) (seen.Add elem) rest
+            
+        // Try to find the index of the first sequence element that hasn't already been added to the rank graph, if any
+        match variation.Sequence |> List.tryFindIndex (fun elem -> elem |> existsInRankGraph rankGraph |> not) with
+        | None -> []
+        | Some idx -> ([], Set.empty, variation.Sequence |> List.skip idx) |||> addUntilDuplicate rankGraph
 
     /// Get the rank of a node with a given name
     static member private rankOfNode rankGraph node =
@@ -133,17 +125,30 @@ type StableGraphLayout private () =
         let reverseNodeAndEdgeOrder rankGraph : DirectedGraph<_,_> =
             { rankGraph with Nodes = rankGraph.Nodes |> List.rev; Edges = rankGraph.Edges |> List.rev }
 
-        /// Update the edges that are already in the graph, but occur in the new variation, by incrementing their frequencies with that of the variation
-        let updateAlreadyKnownEdges rankGraph variation =
-            let alreadyKnownEdges = variation.Sequence |> List.choose (fun se ->
-                match se with
-                | Edge(a, b), freq ->
-                    match rankGraph.Edges |> List.tryFindIndex (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) with
-                    | Some idx -> Some (idx, freq)
-                    | _ -> None
-                | _ -> None)
+        /// Update the edges that occur multiple times in the variation, after they have been added to the rank graph
+        let updateDuplicateEdges rankGraph variation =
+            // Find edges in the variation that already exist in the rank graph, but also appear at least twice in the variation
+            let duplicateEdges =
+                variation.Sequence
+                |> List.choose (fun se ->
+                    match se with
+                    | Edge(a, b), freq ->
+                        match rankGraph.Edges |> List.tryFindIndex (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) with
+                        | Some idx -> Some (a, b, idx, freq)
+                        | _ -> None
+                    | _ -> None)
+                |> List.groupBy (fun (a, b, _, _) -> a, b)
+                |> List.map (fun (_, edges) ->
+                    match edges |> List.skip 1 with
+                    | [] -> None
+                    | edges ->
+                        edges
+                        |> List.reduce (fun (a, b, idx, freqA) (_, _, _, freqB) -> a, b, idx, freqA + freqB)
+                        |> fun (_, _, idx, freq) -> Some(idx, freq))
+                |> List.choose id
 
-            (rankGraph, alreadyKnownEdges) ||> List.fold (fun graph (idx, freqToIncrement) ->
+            // Update edges with aggregated frequency
+            (rankGraph, duplicateEdges) ||> List.fold (fun graph (idx, freqToIncrement) ->
                 let (a, b, existingFreq) = graph.Edges[idx]
                 { graph with Edges = graph.Edges |> List.updateAt idx (a, b, existingFreq + freqToIncrement) })
 
@@ -308,9 +313,9 @@ type StableGraphLayout private () =
 
         /// Process a variation until no more new sequences can be added to the rank graph
         let rec processVariation variation skeleton (rankGraph, components) =
-            match (rankGraph, variation) ||> StableGraphLayout.newSequences with
+            match (rankGraph, variation) ||> StableGraphLayout.newSequence with
             | [] -> rankGraph, components, skeleton
-            | seq :: _ ->
+            | seq ->
                 // Insert the first found new sequence into the graph
                 let rankGraph, components = seq |> insertSequence rankGraph components
                 // Add the sequence to the skeleton if it contains at least one node (Definition 4.2.1 of Mennens 2018)
@@ -322,8 +327,9 @@ type StableGraphLayout private () =
         let rankGraph, _, skeleton =
             (({ Nodes = []; Edges = [] }, [], []), variations)
             ||> List.fold (fun (graph, components, skeleton) variation ->
-                let graph = updateAlreadyKnownEdges graph variation
-                (graph, components) |> processVariation variation skeleton)
+                let graph, components, skeleton = (graph, components) |> processVariation variation skeleton
+                let graph = updateDuplicateEdges graph variation
+                graph, components, skeleton)
 
         // Normalize the rank graph and order nodes and edges correctly, and return it together with the skeleton
         rankGraph |> normalizeRanks |> reverseNodeAndEdgeOrder, skeleton
