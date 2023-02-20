@@ -31,6 +31,7 @@ type internal SequenceNode =
 
 /// An undirected graph that represents the node sequence graph of a given rank graph and skeleton (data structure is technically directed, but use edges as two-way connections)
 type internal NodeSequenceGraph = DirectedGraph<SequenceNode>
+type internal GlobalOrderNodeSequenceGraph = DirectedGraph<SequenceNode * int> // Integer indicates the X position of the node
 
 [<AbstractClass; Sealed>]
 type StableGraphLayout private () =
@@ -342,14 +343,26 @@ type StableGraphLayout private () =
         // Normalize the rank graph and order nodes and edges correctly, and return it together with the skeleton
         rankGraph |> normalizeRanks |> reverseNodeAndEdgeOrder, skeleton
 
-    /// Compute a global order given a global rank graph and the process skeleton
-    static member internal computeNodeSequenceGraph rg skeleton =
+    /// Get the discovery index of a sequence node, real or virtual
+    static member internal getDiscoveryIndex elem =
+        match elem with
+        | Real(_, idx, _)
+        | Virtual(_, idx) -> idx
 
-        /// Get the discovery index of a sequence node, real or virtual
-        let getDiscoveryIndex elem =
-            match elem with
-            | Real(_, idx, _) -> idx
-            | Virtual(_, idx) -> idx
+    /// Get the rank of a sequence node, real or virtual
+    static member internal getRank elem =
+        match elem with
+        | Real(rank, _, _)
+        | Virtual(rank, _) -> rank
+
+    /// Get the name of a sequence node, if it is real
+    static member internal getName elem =
+        match elem with
+        | Real(_, _, name) -> Some name
+        | _ -> None
+
+    /// Compute a node sequence graph given a global rank graph and the process skeleton
+    static member internal computeNodeSequenceGraph rg skeleton =
 
         /// Try to find an edge between two nodes, disregarding the direction of the edge
         let tryFindEdge (nsg: NodeSequenceGraph) nodeA nodeB =
@@ -371,8 +384,7 @@ type StableGraphLayout private () =
             nsg.Nodes |> List.tryFindIndex (fun n ->
                 match n with
                 | Real(r, idx, _) -> r = rank && idx = discoveryIndex
-                | Virtual(r, idx) -> r = rank && idx = discoveryIndex
-            )
+                | Virtual(r, idx) -> r = rank && idx = discoveryIndex)
 
         /// Try to find a real node on a rank with a given name, disregarding the discovery index
         let tryFindRealNodeOnRank (nsg: NodeSequenceGraph) rank name =
@@ -435,7 +447,7 @@ type StableGraphLayout private () =
                     let nsg, nodeB = addOrReplaceRealNode nsg rankB idx b
 
                     // Determine whether the target node is in the same "column", i.e. has the same discovery index. If not, the last edge must merge the connection
-                    let targetA, targetB = getDiscoveryIndex nodeA, getDiscoveryIndex nodeB
+                    let targetA, targetB = StableGraphLayout.getDiscoveryIndex nodeA, StableGraphLayout.getDiscoveryIndex nodeB
 
                     // Add a connection between the two nodes, and insert virtual nodes where required
                     match abs(rankA - rankB) with
@@ -450,6 +462,53 @@ type StableGraphLayout private () =
                 | _ -> nsg
             )
         )
+
+    /// Compute a global order given a global rank graph and a node sequence graph based on this global rank graph
+    static member internal computeGlobalOrder (rankGraph: GlobalRankGraph) (nsg: NodeSequenceGraph) : GlobalOrderNodeSequenceGraph =
+
+        /// Get the list of nodes belonging to the same sequence as a given node, sorted by their rank 
+        let getNodeSequence (nsg: NodeSequenceGraph) (node: SequenceNode) =
+            let nodeDiscoveryIdx = StableGraphLayout.getDiscoveryIndex node
+            nsg.Nodes
+            |> List.filter (fun n ->
+                match n with
+                | Real(_, idx, _)
+                | Virtual(_, idx) -> idx = nodeDiscoveryIdx)
+            |> List.sortBy (fun n -> StableGraphLayout.getRank n)
+
+        /// Compute the sequence connectedness of two sequences (Definition 4.2.4 of Mennens 2018)
+        let computeSequenceConnectedness (rg: GlobalRankGraph) (nsg: NodeSequenceGraph) (s1: SequenceNode list) (s2: SequenceNode list) =
+            nsg.Edges
+            |> List.filter (fun (a, b) ->
+                match a, b with
+                | Real _, Real _ -> List.contains a s1 && List.contains b s2 || List.contains b s1 && List.contains a s2
+                | _ -> false)
+            |> List.sumBy (fun (a, b) ->
+                match StableGraphLayout.getName a, StableGraphLayout.getName b with
+                | Some a, Some b -> rg.Edges |> List.find (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) |> fun (_, _, freq) -> freq
+                | _ -> 0)
+
+        // The list of nodes that belong to the backbone
+        let backboneNodes =
+            nsg.Nodes
+            |> List.groupBy StableGraphLayout.getRank
+            |> List.map (fun (_, nodes) -> nodes |> List.minBy StableGraphLayout.getDiscoveryIndex)
+
+        // The set of sequences belonging to the backbone
+        let backboneSequences = backboneNodes |> List.map (fun n -> n |> getNodeSequence nsg)
+
+        /// Get a sort value for a given node based on the backbone connectedness of its node sequence
+        let connectednessSort (nsg: NodeSequenceGraph) (node: SequenceNode) =
+            let nodeSequence = node |> getNodeSequence nsg
+            backboneSequences |> List.sumBy (fun seq -> computeSequenceConnectedness rankGraph nsg seq nodeSequence)
+
+        let sortedByConnectedness =
+            nsg.Nodes
+            |> List.groupBy StableGraphLayout.getRank
+            |> List.sortBy fst
+            |> List.map (fun (rank, nodes) -> rank, nodes |> List.sortBy (fun n -> connectednessSort nsg n))
+
+        {Nodes = []; Edges = []}
 
     /// <summary>
     /// Compute a Global Ranking for all activities in an event log, merging the flattened logs of all object types together to get a total view.

@@ -91,3 +91,14 @@ module ``Stable graph layout tests`` =
             let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
             let nsg = StableGraphLayout.computeNodeSequenceGraph gr skeleton
             nsg |> Assert.NotNull
+
+    module ``Global order`` =
+
+        [<Fact>]
+        let ``Can discover global order from 'GitHub pm4py' log`` () =
+            let json = File.ReadAllText("github_pm4py.jsonocel")
+            let log = OcelJson.deserialize true json
+            let gr, skeleton = StableGraphLayout.ComputeGlobalRanking log
+            let nsg = StableGraphLayout.computeNodeSequenceGraph gr skeleton
+            let globalOrder = StableGraphLayout.computeGlobalOrder gr nsg
+            globalOrder |> Assert.NotNull
