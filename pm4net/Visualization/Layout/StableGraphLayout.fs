@@ -467,7 +467,7 @@ type StableGraphLayout private () =
     static member internal computeGlobalOrder (rankGraph: GlobalRankGraph) (nsg: NodeSequenceGraph) : GlobalOrderNodeSequenceGraph =
 
         /// Get the list of nodes belonging to the same sequence as a given node, sorted by their rank 
-        let getNodeSequence (nsg: NodeSequenceGraph) (node: SequenceNode) =
+        let nodeSequence (nsg: NodeSequenceGraph) (node: SequenceNode) =
             let nodeDiscoveryIdx = StableGraphLayout.getDiscoveryIndex node
             nsg.Nodes
             |> List.filter (fun n ->
@@ -477,36 +477,64 @@ type StableGraphLayout private () =
             |> List.sortBy (fun n -> StableGraphLayout.getRank n)
 
         /// Compute the sequence connectedness of two sequences (Definition 4.2.4 of Mennens 2018)
-        let computeSequenceConnectedness (rg: GlobalRankGraph) (nsg: NodeSequenceGraph) (s1: SequenceNode list) (s2: SequenceNode list) =
+        let sequenceConnectedness (rg: GlobalRankGraph) (nsg: NodeSequenceGraph) (s1: SequenceNode list) (s2: SequenceNode list) =
             nsg.Edges
-            |> List.filter (fun (a, b) ->
-                match a, b with
-                | Real _, Real _ -> List.contains a s1 && List.contains b s2 || List.contains b s1 && List.contains a s2
-                | _ -> false)
+            // Only get edges that start in one node sequence and end in the other
+            |> List.filter (fun (a, b) -> List.contains a s1 && List.contains b s2 || List.contains b s1 && List.contains a s2)
             |> List.sumBy (fun (a, b) ->
                 match StableGraphLayout.getName a, StableGraphLayout.getName b with
                 | Some a, Some b -> rg.Edges |> List.find (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) |> fun (_, _, freq) -> freq
                 | _ -> 0)
 
+        /// Get a sort value for a given node based on the backbone connectedness of its node sequence
+        let connectednessSort (nsg: NodeSequenceGraph) (backboneSeqs: SequenceNode list list) (node: SequenceNode) =
+            let nodeSequence = node |> nodeSequence nsg
+            backboneSeqs |> List.sumBy (fun seq -> sequenceConnectedness rankGraph nsg seq nodeSequence)
+
+        /// Find the connected components when excluding backbone nodes
+        let findComponents (nsg: NodeSequenceGraph) (backbone: Set<SequenceNode>) =
+
+            /// Find the list of connected nodes, excluding nodes that are part of the backbone
+            let rec findConnectedNodes (nsg: NodeSequenceGraph) (backbone: Set<SequenceNode>) (visited: SequenceNode list) (node: SequenceNode) =
+                let visited = node :: visited
+                let connectedNodes =
+                    nsg.Edges
+                    |> List.filter (fun (a, b) ->
+                        backbone.Contains node |> not &&
+                        (a = node && backbone.Contains b |> not && visited |> List.contains b |> not) ||
+                        (b = node && backbone.Contains a |> not && visited |> List.contains a |> not))
+                    |> List.map (fun (a, b) -> if a = node then b else a)
+                let visited = (visited, connectedNodes) ||> List.fold (fun vis node -> (vis, node) ||> findConnectedNodes nsg backbone)
+                visited |> List.distinct
+
+            // Find all nodes that we need to visit (all except backbone), and fold through them, finding their components along the way
+            let nodesToVisit = backbone |> Set.difference (nsg.Nodes |> Set.ofList) 
+            ((Set.empty: Set<Set<SequenceNode>>), nodesToVisit) ||> Set.fold (fun components node ->
+                match Set.exists (fun comp -> comp |> Set.contains node) components with
+                | true -> components // Node already in a component
+                | false ->
+                    let nodes = ([], node) ||> findConnectedNodes nsg backbone |> Set.ofList
+                    if nodes.IsEmpty then components else components.Add nodes
+            )
+
         // The list of nodes that belong to the backbone
-        let backboneNodes =
+        let backbone =
             nsg.Nodes
             |> List.groupBy StableGraphLayout.getRank
             |> List.map (fun (_, nodes) -> nodes |> List.minBy StableGraphLayout.getDiscoveryIndex)
 
+        // The connected components when "cutting" the backbone nodes out
+        let components = findComponents nsg (backbone |> Set.ofList)
+
         // The set of sequences belonging to the backbone
-        let backboneSequences = backboneNodes |> List.map (fun n -> n |> getNodeSequence nsg)
+        let backboneSequences = backbone |> List.map (fun n -> n |> nodeSequence nsg)
 
-        /// Get a sort value for a given node based on the backbone connectedness of its node sequence
-        let connectednessSort (nsg: NodeSequenceGraph) (node: SequenceNode) =
-            let nodeSequence = node |> getNodeSequence nsg
-            backboneSequences |> List.sumBy (fun seq -> computeSequenceConnectedness rankGraph nsg seq nodeSequence)
-
-        let sortedByConnectedness =
+        // The nodes on each rank, sorted by backbone connectedness
+        let nodesByRankSorted =
             nsg.Nodes
             |> List.groupBy StableGraphLayout.getRank
             |> List.sortBy fst
-            |> List.map (fun (rank, nodes) -> rank, nodes |> List.sortBy (fun n -> connectednessSort nsg n))
+            |> List.map (fun (rank, nodes) -> rank, nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n))
 
         {Nodes = []; Edges = []}
 
