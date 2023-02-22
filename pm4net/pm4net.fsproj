@@ -2,6 +2,19 @@
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net6.0</TargetFrameworks>
+	<PackageId>pm4net</PackageId>
+	<Title>A general-purpose Process Mining library for .NET</Title>
+	<Authors>johannesmols</Authors>
+	<Copyright>Copyright (c) Johannes Mols 2023</Copyright>
+	<PackageTags>process-mining pm ocel</PackageTags>
+	<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+	<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+	<PackageReadmeFile>README.md</PackageReadmeFile>
+	<PackageDescription>A general-purpose Process Mining library for .NET, primarily focusing on techniques concerning Object-Centric Event Logs.</PackageDescription>
+	<PackageProjectUrl>https://github.com/pm4net/pm4net</PackageProjectUrl>
+	<RepositoryUrl>https://github.com/pm4net/pm4net.git</RepositoryUrl>
+	<IncludeSymbols>true</IncludeSymbols>
+	<SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
@@ -17,6 +30,9 @@
     <Compile Include="Algorithms\Discovery\Ocel\OcelPetriNet.fs" />
     <Compile Include="Visualization\Layout\StableGraphLayout.fs" />
     <Compile Include="Visualization\Ocel\Graphviz.fs" />
+	<Content Include="..\README.md" Pack="true" PackagePath="\">
+	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</Content>
   </ItemGroup>
 
   <ItemGroup>
