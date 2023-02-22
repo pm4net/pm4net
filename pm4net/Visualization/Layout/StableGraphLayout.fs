@@ -42,12 +42,12 @@ type Node = {
 
 type EdgeWaypoint = {
     Edge: string * string
-    Waypoints: (int * int) list
+    Waypoints: (int * int) seq
 }
 
 type GlobalOrder = {
-    Nodes: Node list
-    EdgeWaypoints: EdgeWaypoint list
+    Nodes: Node seq
+    EdgeWaypoints: EdgeWaypoint seq
 }
 
 [<AbstractClass; Sealed>]
@@ -773,11 +773,29 @@ type StableGraphLayout private () =
 
     (* --- Overloads for C# OCEL log type --- *)
 
+    /// <summary>
+    /// Compute a global order for an event log, flattening for a specific object type.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
+    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
+    /// </summary>
     static member ComputeGlobalOrder (log: OCEL.CSharp.OcelLog) =
         log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> StableGraphLayout.ComputeGlobalOrder
 
+    /// <summary>
+    /// Compute a global order, flattening for a specific object type.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
+    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
+    /// </summary>
     static member ComputeGlobalOrderForObjectType(log: OCEL.CSharp.OcelLog, objType) =
          StableGraphLayout.ComputeGlobalOrderForObjectType(log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog, objType)
 
+    /// <summary>
+    /// Compute a global order for each object type in an event log.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
+    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
+    /// </summary>
     static member ComputeGlobalOrderForEachObjectType (log: OCEL.CSharp.OcelLog) =
         log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> StableGraphLayout.ComputeGlobalOrderForEachObjectType |> Map.toSeq |> dict
