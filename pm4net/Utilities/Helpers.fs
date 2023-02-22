@@ -9,6 +9,10 @@ module internal Helpers =
     let mapNestedList mapper nestedList =
         nestedList |> List.map (fun list -> list |> List.map mapper)
 
+    /// Apply a mapping function to a nested sequence
+    let mapNestedSeq mapper nestedSeq =
+        nestedSeq |> Seq.map (fun seq -> seq |> Seq.map mapper)
+
     /// Return the most common value in a list, given some extractor function to extract the property (can just be id)
     let mostCommonValue extractor list =
         list

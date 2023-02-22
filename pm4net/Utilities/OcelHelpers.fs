@@ -66,12 +66,12 @@ type OcelHelpers private () =
 
     /// Get the namespace attribute from an OCEL event. Returns an empty string if it does not exist.
     static member GetNamespace event =
-        let ns = event |> OcelHelpers.GetStringAttribute "pm4net_Namespace"
-        if ns = String.Empty then event |> OcelHelpers.GetStringAttribute "SourceContext" else ns
+        let ns = event |> OcelHelpers.GetStringAttribute Constants.``namespace``
+        if ns = String.Empty then event |> OcelHelpers.GetStringAttribute Constants.sourceContext else ns
 
     /// Get the log level attribute from an OCEL event. Returns the Unknown case if it does not exist.
     static member GetLogLevel event =
-        event |> OcelHelpers.GetStringAttribute "pm4net_Level" |> LogLevel.FromString
+        event |> OcelHelpers.GetStringAttribute Constants.level |> LogLevel.FromString
 
     /// Extract a tree hierarchy from a list of fully qualified namespaces
     static member NamespaceTree separators (namespaces: string seq) =

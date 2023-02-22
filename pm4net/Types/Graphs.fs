@@ -3,6 +3,11 @@ namespace pm4net.Types.Dfg
 open System
 open pm4net.Types
 
+type DirectedGraph<'Node> when 'Node : comparison = {
+    Nodes: 'Node list
+    Edges: ('Node * 'Node) list
+}
+
 type DirectedGraph<'Node, 'Edge> when 'Node : comparison = {
     Nodes: 'Node list
     Edges: ('Node * 'Node * 'Edge) list

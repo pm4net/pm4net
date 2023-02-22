@@ -22,7 +22,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{B508
 		Samples\minimal.db = Samples\minimal.db
 		Samples\minimal.jsonocel = Samples\minimal.jsonocel
 		Samples\minimal.xmlocel = Samples\minimal.xmlocel
+		Samples\recruiting.jsonocel = Samples\recruiting.jsonocel
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pm4net.CSharpTests", "pm4net.CSharpTests\pm4net.CSharpTests.csproj", "{712EFB87-F255-41A5-B8EA-B8855E9E2D03}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -38,6 +41,10 @@ Global
 		{10658E70-044E-4FD7-990D-684E98E4F49D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{10658E70-044E-4FD7-990D-684E98E4F49D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{10658E70-044E-4FD7-990D-684E98E4F49D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{712EFB87-F255-41A5-B8EA-B8855E9E2D03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{712EFB87-F255-41A5-B8EA-B8855E9E2D03}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{712EFB87-F255-41A5-B8EA-B8855E9E2D03}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{712EFB87-F255-41A5-B8EA-B8855E9E2D03}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
