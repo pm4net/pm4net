@@ -361,11 +361,23 @@ type StableGraphLayout private () =
         // Normalize the rank graph and order nodes and edges correctly, and return it together with the skeleton
         rankGraph |> normalizeRanks |> reverseNodeAndEdgeOrder, skeleton
 
+    /// Get the rank of a sequence node, real or virtual
+    static member internal getRank elem =
+        match elem with
+        | Real(rank, _, _)
+        | Virtual(rank, _) -> rank
+
     /// Get the discovery index of a sequence node, real or virtual
     static member internal getDiscoveryIndex elem =
         match elem with
         | Real(_, idx, _)
         | Virtual(_, idx) -> idx
+
+    /// Get the name of a sequence node, if it is real
+    static member internal getName elem =
+        match elem with
+        | Real(_, _, name) -> Some name
+        | _ -> None
 
     /// Compute a node sequence graph given a global rank graph and the process skeleton
     static member internal computeNodeSequenceGraph rg skeleton =
@@ -476,18 +488,6 @@ type StableGraphLayout private () =
     /// Compute a global order given a global rank graph and a node sequence graph based on this global rank graph
     static member internal computeGlobalOrder (rankGraph: GlobalRankGraph) (nsg: NodeSequenceGraph) : GlobalOrderNodeSequenceGraph =
 
-        /// Get the rank of a sequence node, real or virtual
-        let getRank elem =
-            match elem with
-            | Real(rank, _, _)
-            | Virtual(rank, _) -> rank
-
-        /// Get the name of a sequence node, if it is real
-        let getName elem =
-            match elem with
-            | Real(_, _, name) -> Some name
-            | _ -> None
-
         /// Get the list of nodes belonging to the same sequence as a given node, sorted by their rank 
         let nodeSequence (nsg: NodeSequenceGraph) (node: SequenceNode) =
             let nodeDiscoveryIdx = StableGraphLayout.getDiscoveryIndex node
@@ -496,7 +496,7 @@ type StableGraphLayout private () =
                 match n with
                 | Real(_, idx, _)
                 | Virtual(_, idx) -> idx = nodeDiscoveryIdx)
-            |> List.sortBy (fun n -> getRank n)
+            |> List.sortBy (fun n -> StableGraphLayout.getRank n)
 
         /// Compute the sequence connectedness of two sequences (Definition 4.2.4 of Mennens 2018)
         let sequenceConnectedness (rg: GlobalRankGraph) (nsg: NodeSequenceGraph) (s1: SequenceNode list) (s2: SequenceNode list) =
@@ -504,7 +504,7 @@ type StableGraphLayout private () =
             // Only get edges that start in one node sequence and end in the other
             |> List.filter (fun (a, b) -> List.contains a s1 && List.contains b s2 || List.contains b s1 && List.contains a s2)
             |> List.sumBy (fun (a, b) ->
-                match getName a, getName b with
+                match StableGraphLayout.getName a, StableGraphLayout.getName b with
                 | Some a, Some b -> rg.Edges |> List.find (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) |> fun (_, _, freq) -> freq
                 | _ -> 0)
 
@@ -570,7 +570,7 @@ type StableGraphLayout private () =
                 let updatedNodesOnRight =
                     goNsg.Nodes
                     |> List.indexed
-                    |> List.filter (fun (_, (pos, n)) -> pos > 0 && n |> getRank = rank)
+                    |> List.filter (fun (_, (pos, n)) -> pos > 0 && n |> StableGraphLayout.getRank = rank)
                     |> List.sortBy (fun (_, (pos, _)) -> pos)
                     |> List.mapi (fun i (idx, (_, node)) -> idx, (i + 1, node)) // Assign position based on iteration index + 1, discarding previous position
 
@@ -584,13 +584,13 @@ type StableGraphLayout private () =
 
                 // Find the index of the node to move in the existing graph so that it can later be updated
                 let newNodeIdx = graph.Nodes |> List.findIndex (fun (_, n) -> n = newNode)
-                let newNodeRank = getRank newNode
+                let newNodeRank = StableGraphLayout.getRank newNode
 
                 // Find the nodes on the same rank that already are on the left side of the backbone
                 let nodesLeftOnSameRank =
                     graph.Nodes
                     |> List.indexed
-                    |> List.filter (fun (_, (x, n)) -> x < 0 && getRank n = getRank newNode)
+                    |> List.filter (fun (_, (x, n)) -> x < 0 && StableGraphLayout.getRank n = StableGraphLayout.getRank newNode)
 
                 // If there is an existing node with a lower order index, place the new node to the left of it and shift all other nodes one to the left
                 // Otherwise, the node can be placed right next to the backbone at position -1
@@ -628,7 +628,7 @@ type StableGraphLayout private () =
         // The list of nodes that belong to the backbone
         let backbone =
             nsg.Nodes
-            |> List.groupBy getRank
+            |> List.groupBy StableGraphLayout.getRank
             |> List.map (fun (_, nodes) -> nodes |> List.minBy StableGraphLayout.getDiscoveryIndex)
 
         // The set of sequences belonging to the backbone
@@ -637,7 +637,7 @@ type StableGraphLayout private () =
         // The nodes on each rank, sorted by backbone connectedness
         let nodesByRankSorted =
             nsg.Nodes
-            |> List.groupBy getRank
+            |> List.groupBy StableGraphLayout.getRank
             |> List.sortBy fst
             |> List.map (fun (rank, nodes) -> rank, nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n))
 
@@ -653,32 +653,60 @@ type StableGraphLayout private () =
     /// Convert a completed global order graph into a more friendly format for consumers
     static member internal convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) : GlobalOrder =
 
-        let filterForVirtual list =
-            list |> List.choose (fun n -> match n with | Virtual _ -> Some n | _ -> None)
+        let realFilter node = match node with | Real _ -> true | _ -> false
 
-        let filterForReal list =
-            list |> List.choose (fun n -> match n with | Real _ -> Some n | _ -> None)
-
-        // Virtual nodes are essentially waypoints for edges to navigate when drawing an edge between two nodes. Therefore, find all edges that use a sequence of waypoints and put them together.
-        let rec getVirtualComponents (graph: GlobalOrderNodeSequenceGraph) (node: SequenceNode) (visited: SequenceNode list) =
-            let visited = node :: visited
-            let linkedNodes =
+        /// Virtual nodes are essentially waypoints for edges to navigate when drawing an edge between two nodes. Therefore, find all edges that use a sequence of waypoints and put them together.
+        let rec getVirtualComponents (graph: GlobalOrderNodeSequenceGraph) (visited: Set<SequenceNode>) (node: SequenceNode)  =
+            let visited = visited.Add node
+            let (realNodes, virtualNodes) =
                 graph.Edges
                 |> List.choose (fun ((_, a), (_, b)) -> if a = node then Some b else if b = node then Some a else None)
-                |> List.filter (fun n -> visited |> List.contains n |> not)
+                |> List.filter (fun n -> visited |> Set.contains n |> not)
+                |> List.partition realFilter
 
-            match linkedNodes with
-            | [] -> visited
-            | _ -> (visited @ (linkedNodes |> filterForReal), linkedNodes |> filterForVirtual) ||> List.fold (fun vis node -> getVirtualComponents graph node vis)
+            let visited = visited |> Set.union (realNodes |> Set.ofList)
+            (visited, virtualNodes) ||> List.fold (fun vis node -> (vis, node) ||> getVirtualComponents graph)
+
+        /// Get the X,Y coordinates of a sequence node in the global order graph
+        let getCoordinatesOfNode (graph: GlobalOrderNodeSequenceGraph) (node: SequenceNode) =
+            let (x, n) = graph.Nodes |> List.find (fun (_, n) -> n = node)
+            x, n |> StableGraphLayout.getRank
+
+        /// Merge multiple reachability sets together by seeing whether any virtual nodes are in multiple sets, and join those together
+        let mergeReachabilitySets (sets: Set<SequenceNode> list) =
+            (([]: Set<SequenceNode> list), sets) ||> List.fold (fun sets set ->
+                let (_, virtualNodes) = set |> Set.partition realFilter
+                let matchingSetIdx = sets |> List.tryFindIndex (fun s -> virtualNodes |> Set.exists (fun node -> s.Contains node))
+                match matchingSetIdx with
+                | Some matchingSetIdx -> (set |> Set.union sets[matchingSetIdx] , sets) ||> List.updateAt matchingSetIdx
+                | None -> set :: sets)
+
+        /// Create combinations from elements within a list (https://stackoverflow.com/a/1231711/2102106)
+        let rec combinations num list =
+            match num, list with
+            | 0, _ -> [[]]
+            | _, [] -> []
+            | num, (head :: tail) -> List.map ((@) [head]) (combinations (num - 1) tail) @ combinations num tail
 
         let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Coordinates = x, y } | _ -> None)
-        let virtualNodes =
+        let waypoints =
             graph.Nodes
             |> List.map snd
-            |> filterForVirtual
-            |> List.map (fun n -> getVirtualComponents graph n [])
+            |> List.choose (fun n -> match n with | Virtual _ -> Some n | _ -> None)
+            |> List.map (fun n -> getVirtualComponents graph Set.empty n)
+            |> mergeReachabilitySets
+            |> List.map (fun set ->
+                let (realNodes, virtualNodes) = set |> Set.partition realFilter
+                let possibleEdges = combinations 2 (realNodes |> Set.toList)
+                possibleEdges |> List.map (fun edge ->
+                    match edge with
+                    | a :: b :: [] -> {
+                        Edge = (StableGraphLayout.getName a).Value, (StableGraphLayout.getName b).Value;
+                        Waypoints = virtualNodes |> Set.map (fun n -> n |> getCoordinatesOfNode graph) |> Set.toList }
+                    | _ -> failwith "Edge may only contain 2 nodes"))
+            |> List.concat
 
-        { Nodes = nodes; EdgeWaypoints = [] }
+        { Nodes = nodes; EdgeWaypoints = waypoints }
 
     /// Compute a friendly-format global order based on a global rank graph and process skeleton
     static member internal computeGlobalOrderBasedOnRankGraphAndSkeleton (gr: GlobalRankGraph, skeleton) =
