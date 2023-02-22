@@ -31,7 +31,7 @@ type internal SequenceNode =
 
 /// An undirected graph that represents the node sequence graph of a given rank graph and skeleton (data structure is technically directed, but use edges as two-way connections)
 type internal NodeSequenceGraph = DirectedGraph<SequenceNode>
-type internal GlobalOrderNodeSequenceGraph = DirectedGraph<SequenceNode * int> // Integer indicates the X position of the node
+type internal GlobalOrderNodeSequenceGraph = DirectedGraph<int * SequenceNode> // Integer indicates the X position of the node
 
 [<AbstractClass; Sealed>]
 type StableGraphLayout private () =
@@ -487,44 +487,127 @@ type StableGraphLayout private () =
                 | _ -> 0)
 
         /// Get a sort value for a given node based on the backbone connectedness of its node sequence
-        let connectednessSort (nsg: NodeSequenceGraph) (backboneSeqs: SequenceNode list list) (node: SequenceNode) =
+        let connectednessSort (nsg: NodeSequenceGraph) backboneSeqs node =
             let nodeSequence = node |> nodeSequence nsg
             backboneSeqs |> List.sumBy (fun seq -> sequenceConnectedness rankGraph nsg seq nodeSequence)
 
         /// Find the connected components when excluding backbone nodes
-        let findComponents (nsg: NodeSequenceGraph) (backbone: Set<SequenceNode>) =
+        let findComponents (nsg: NodeSequenceGraph) backbone =
 
             /// Find the list of connected nodes, excluding nodes that are part of the backbone
-            let rec findConnectedNodes (nsg: NodeSequenceGraph) (backbone: Set<SequenceNode>) (visited: SequenceNode list) (node: SequenceNode) =
+            let rec findConnectedNodes (nsg: NodeSequenceGraph) (backbone: SequenceNode list) visited node =
                 let visited = node :: visited
                 let connectedNodes =
                     nsg.Edges
                     |> List.filter (fun (a, b) ->
-                        backbone.Contains node |> not &&
-                        (a = node && backbone.Contains b |> not && visited |> List.contains b |> not) ||
-                        (b = node && backbone.Contains a |> not && visited |> List.contains a |> not))
+                        backbone |> List.contains node |> not &&
+                        (a = node && backbone |> List.contains b |> not && visited |> List.contains b |> not) ||
+                        (b = node && backbone |> List.contains a |> not && visited |> List.contains a |> not))
                     |> List.map (fun (a, b) -> if a = node then b else a)
                 let visited = (visited, connectedNodes) ||> List.fold (fun vis node -> (vis, node) ||> findConnectedNodes nsg backbone)
                 visited |> List.distinct
 
             // Find all nodes that we need to visit (all except backbone), and fold through them, finding their components along the way
-            let nodesToVisit = backbone |> Set.difference (nsg.Nodes |> Set.ofList) 
-            ((Set.empty: Set<Set<SequenceNode>>), nodesToVisit) ||> Set.fold (fun components node ->
-                match Set.exists (fun comp -> comp |> Set.contains node) components with
+            let nodesToVisit = backbone |> Set.ofList |> Set.difference (nsg.Nodes |> Set.ofList) |> Set.toList
+            ([], nodesToVisit) ||> List.fold (fun components node ->
+                match List.exists (fun comp -> comp |> List.contains node) components with
                 | true -> components // Node already in a component
                 | false ->
-                    let nodes = ([], node) ||> findConnectedNodes nsg backbone |> Set.ofList
-                    if nodes.IsEmpty then components else components.Add nodes
-            )
+                    let nodes = ([], node) ||> findConnectedNodes nsg backbone
+                    if nodes.IsEmpty then components else nodes :: components)
+            |> List.sortByDescending (fun set -> set.Length)
+
+        /// Calculate the ratio of nodes that are left or right of the backbone in a global order NSG
+        let calculateRatio (goNsg: GlobalOrderNodeSequenceGraph) (backbone: SequenceNode list) =
+            let (left, right) =
+                goNsg.Nodes
+                |> List.filter (fun (_, n) -> backbone |> List.contains n |> not)
+                |> List.partition (fun (x, _) -> x < 0)
+
+            (left.Length |> float32) / (right.Length |> float32)
+
+        /// Creates a global order graph from a node sequence graph and the sort order permutation for each rank
+        let createGlobalOrderNsg (nsg: NodeSequenceGraph) sortedNodes : GlobalOrderNodeSequenceGraph =
+            let nodesWithPos = sortedNodes |> List.map (fun (_, nodes) -> nodes |> List.indexed) |> List.concat
+            let edgesWithPos = nsg.Edges |> List.map (fun (a, b) -> nodesWithPos |> List.find (fun (_, n) -> a = n), nodesWithPos |> List.find (fun (_, n) -> b = n))
+            { Nodes = nodesWithPos; Edges = edgesWithPos }
+
+        /// Move a component to the left side of the backbone of a global order graph, preserving the connectedness sort order
+        let moveComponentLeft (goNsg: GlobalOrderNodeSequenceGraph) (originalOrder: (int * SequenceNode list) list) (nodes: SequenceNode list) =
+
+            /// Update any edge that references a node with the new position assigned to the node
+            let updateEdge (goNsg: GlobalOrderNodeSequenceGraph) ((pos, node): int * SequenceNode) =
+                let edges = goNsg.Edges |> List.indexed |> List.filter (fun (_, ((_, a), (_, b))) -> a = node || b = node)
+                let updatedEdges = (goNsg.Edges, edges) ||> List.fold (fun state (idx, ((posA, a), (posB, b))) ->
+                    let newEdge = if a = node then ((pos, a), (posB, b)) else ((posA, a), (pos, b))
+                    state |> List.updateAt idx newEdge)
+                { goNsg with Edges = updatedEdges }
+
+            /// Close any gaps on the right-hand side created by moving a node to the left side of the backbone
+            let closeGaps rank (goNsg: GlobalOrderNodeSequenceGraph) =
+                let updatedNodesOnRight =
+                    goNsg.Nodes
+                    |> List.indexed
+                    |> List.filter (fun (_, (pos, n)) -> pos > 0 && n |> StableGraphLayout.getRank = rank)
+                    |> List.sortBy (fun (_, (pos, _)) -> pos)
+                    |> List.mapi (fun i (idx, (_, node)) -> idx, (i + 1, node)) // Assign position based on iteration index + 1, discarding previous position
+
+                let updatedNodes = (goNsg.Nodes, updatedNodesOnRight) ||> List.fold (fun state (idx, node) -> state |> List.updateAt idx node)
+                ({ goNsg with Nodes = updatedNodes }, updatedNodesOnRight) ||> List.fold (fun graph (_, node) -> updateEdge graph node)
+
+            (goNsg, nodes) ||> List.fold (fun graph newNode ->
+                /// Get the index in the original ordering of a given node on a rank
+                let getIdxInOriginalOrdering originalOrder rank node =
+                    originalOrder |> List.find (fun (r, _) -> r = rank) |> snd |> List.findIndex (fun n -> n = node)
+
+                // Find the index of the node to move in the existing graph so that it can later be updated
+                let newNodeIdx = graph.Nodes |> List.findIndex (fun (_, n) -> n = newNode)
+                let newNodeRank = StableGraphLayout.getRank newNode
+
+                // Find the nodes on the same rank that already are on the left side of the backbone
+                let nodesLeftOnSameRank =
+                    graph.Nodes
+                    |> List.indexed
+                    |> List.filter (fun (_, (x, n)) -> x < 0 && StableGraphLayout.getRank n = StableGraphLayout.getRank newNode)
+
+                // If there is an existing node with a lower order index, place the new node to the left of it and shift all other nodes one to the left
+                // Otherwise, the node can be placed right next to the backbone at position -1
+                match nodesLeftOnSameRank with
+                | [] ->
+                    let newNodeWithPos = (-1, newNode)
+                    let graph = { graph with Nodes = graph.Nodes |> List.updateAt newNodeIdx newNodeWithPos } |> closeGaps newNodeRank
+                    updateEdge graph newNodeWithPos
+                | leftNodes ->
+                    // First partition nodes by whether they will be on the left side of the node to move, or on the right, based on the original connectedness ordering for the rank
+                    let (left, right) = leftNodes |> List.partition (fun (_, (_, node)) -> getIdxInOriginalOrdering originalOrder newNodeRank newNode < getIdxInOriginalOrdering originalOrder newNodeRank node)
+
+                    // Find the lowest position of nodes on the right-hand side and subtract -1 to place it to the left of that node
+                    let newNodePos =
+                        match right with
+                        | [] -> -1
+                        | right -> right |> List.minBy (fun (_, (pos, _)) -> pos) |> fun (_, (pos, _)) -> pos - 1 // Place left of node with lowest position
+
+                    // Shift nodes on the left one position to the left
+                    let left = left |> List.map (fun (idx, (pos, node)) -> idx, (pos - 1, node))
+
+                    // Update the nodes left of the moved node and the moved note itself with the new position
+                    let nodesToUpdate = (newNodeIdx, (newNodePos, newNode)) :: left
+                    let updatedNodes = (graph.Nodes, nodesToUpdate) ||> List.fold (fun state (idx, nodeToUpdate) -> state |> List.updateAt idx nodeToUpdate)
+                    ({ graph with Nodes = updatedNodes } |> closeGaps newNodeRank, nodesToUpdate) ||> List.fold (fun graph (_, node) -> updateEdge graph node))
+
+        /// Balance the NSG by moving components to the left of the backbone, if that improves the balance.
+        let balanceComponents (goNsg: GlobalOrderNodeSequenceGraph) (components: SequenceNode list list) (backbone: SequenceNode list) (originalOrder: (int * SequenceNode list) list) : GlobalOrderNodeSequenceGraph =
+            (goNsg, components) ||> List.fold (fun graph comp ->
+                let ratioBefore = (graph, backbone) ||> calculateRatio
+                let ratioAfter = ({ graph with Nodes = graph.Nodes |> List.map (fun (x, n) -> if comp |> List.contains n then -1, n else x, n)}, backbone) ||> calculateRatio
+                let ratioImproved = abs(ratioAfter - 1f) < abs(ratioBefore - 1f) // Is the distance to ideal ratio (1) lower than before?
+                if ratioImproved then moveComponentLeft graph originalOrder comp else graph)
 
         // The list of nodes that belong to the backbone
         let backbone =
             nsg.Nodes
             |> List.groupBy StableGraphLayout.getRank
             |> List.map (fun (_, nodes) -> nodes |> List.minBy StableGraphLayout.getDiscoveryIndex)
-
-        // The connected components when "cutting" the backbone nodes out
-        let components = findComponents nsg (backbone |> Set.ofList)
 
         // The set of sequences belonging to the backbone
         let backboneSequences = backbone |> List.map (fun n -> n |> nodeSequence nsg)
@@ -536,7 +619,14 @@ type StableGraphLayout private () =
             |> List.sortBy fst
             |> List.map (fun (rank, nodes) -> rank, nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n))
 
-        {Nodes = []; Edges = []}
+        // Convert the existing NSG into a global order graph by inserting X position into nodes
+        let globalOrderNsg = createGlobalOrderNsg nsg nodesByRankSorted
+
+        // The connected components when "cutting" the backbone nodes out
+        let components = findComponents nsg backbone
+
+        // Balance the components by moving some to the left
+        balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
     /// <summary>
     /// Compute a Global Ranking for all activities in an event log, merging the flattened logs of all object types together to get a total view.
