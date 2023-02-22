@@ -113,3 +113,17 @@ module ``Stable graph layout tests`` =
             let log = log.MergeDuplicateObjects()
             let globalOrder = StableGraphLayout.ComputeGlobalOrder log
             globalOrder |> Assert.NotNull
+
+        [<Fact>]
+        let ``Can discover global order from 'GitHub pm4py' log`` () =
+            let json = File.ReadAllText("github_pm4py.jsonocel")
+            let log = OcelJson.deserialize true json
+            let globalOrder = StableGraphLayout.ComputeGlobalOrder log
+            globalOrder |> Assert.NotNull
+
+        [<Fact>]
+        let ``Can discover global order from 'recruiting' log`` () =
+            let json = File.ReadAllText("recruiting.jsonocel")
+            let log = OcelJson.deserialize true json
+            let globalOrder = StableGraphLayout.ComputeGlobalOrder log
+            globalOrder |> Assert.NotNull
