@@ -10,10 +10,10 @@ open pm4net.Utilities
 do()
 
 /// A directed graph that represents the global rank graph. Nodes consist of activity name and rank, and edges store their frequency.
-type GlobalRankGraph = DirectedGraph<string * int, int>
+type internal GlobalRankGraph = DirectedGraph<string * int, int>
 
 /// Type to represent a sequence of nodes and edges, where an edge consists of two nodes
-type SequenceElement<'a> =
+type internal SequenceElement<'a> =
     | Node of 'a
     | Edge of 'a * 'a
 
@@ -33,6 +33,23 @@ type internal SequenceNode =
 type internal NodeSequenceGraph = DirectedGraph<SequenceNode>
 type internal GlobalOrderNodeSequenceGraph = DirectedGraph<int * SequenceNode> // Integer indicates the X position of the node
 
+// Public types to expose to the callers
+
+type Node = {
+    Name: string
+    Coordinates: int * int
+}
+
+type EdgeWaypoint = {
+    Edge: string * string
+    Waypoints: (int * int) list
+}
+
+type GlobalOrder = {
+    Nodes: Node list
+    EdgeWaypoints: EdgeWaypoint list
+}
+
 [<AbstractClass; Sealed>]
 type StableGraphLayout private () =
 
@@ -41,20 +58,6 @@ type StableGraphLayout private () =
         let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0 | Edge _, freq -> pown freq 2)
         let vLenSquared = pown variation.Events.Length 2
         wSquaredSum * vLenSquared
-
-    /// Compute the sequence of a trace, not accounting for the existing global rank graph (interleaved nodes and edges) (Definition 4.1.2 of Mennes 2018)
-    static member internal simpleSequence freq trace =
-        match trace with
-        | [] -> []
-        | [single] -> [Node(single), freq]
-        | _ -> 
-            trace
-            |> List.pairwise
-            |> List.mapi (fun i (a, b) ->
-                match i with
-                | 0 -> [Node(a), 0; Edge(a, b), freq; Node(b), 0]
-                | _ -> [Edge(a, b), freq; Node(b), 0])
-            |> List.concat
 
     /// Removes direct repetitions in a list (e.g. [A,A,B,C,C] -> [A,B,C]). Section 2.1 of Mennens 2018.
     static member internal removeDirectRepetitions comparer trace =
@@ -65,6 +68,21 @@ type StableGraphLayout private () =
 
     /// Extract the unique variations in the flattened log and order them by importance
     static member internal variationsInLog objType log =
+
+        /// Compute the sequence of a trace, not accounting for the existing global rank graph (interleaved nodes and edges) (Definition 4.1.2 of Mennes 2018)
+        let simpleSequence freq trace =
+            match trace with
+            | [] -> []
+            | [single] -> [Node(single), freq]
+            | _ -> 
+                trace
+                |> List.pairwise
+                |> List.mapi (fun i (a, b) ->
+                    match i with
+                    | 0 -> [Node(a), 0; Edge(a, b), freq; Node(b), 0]
+                    | _ -> [Edge(a, b), freq; Node(b), 0])
+                |> List.concat
+
         log
         |> OcelHelpers.OrderedTracesOfFlattenedLog // Get traces based on referenced object
         |> Helpers.mapNestedList snd // Discard the event ID as it is not relevant
@@ -78,39 +96,17 @@ type StableGraphLayout private () =
                 startEvent :: events @ [endEvent]
             | None -> events)
         |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
-        |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> StableGraphLayout.simpleSequence })
-
-    /// Extract a new continuous sequence that only contains nodes and/or edges that are not yet in the rank graph. Stops when duplicates are encountered. (Mennens 2019, Section 3.1.1)
-    static member internal newSequence rankGraph variation =
-
-        /// Checks whether a given sequence element is already in the rank graph
-        let existsInRankGraph rg = function
-            | Node n, _ -> rg.Nodes |> List.exists (fun (act, _) -> act = n)
-            | Edge (a, b), _ -> rg.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b)
-
-        /// Add sequence elements until a duplicate is encountered, either already in the rank graph, or in the new sequence
-        let rec addUntilDuplicate rankGraph state (seen: Set<_>) seq =
-            match seq with
-            | [] -> state |> List.rev
-            | elem :: rest ->
-                if elem |> existsInRankGraph rankGraph then state |> List.rev
-                else if elem |> seen.Contains then elem :: state |> List.rev // Add the duplicate element to "complete" sequence, since it's not in rank graph yet
-                else addUntilDuplicate rankGraph (elem :: state) (seen.Add elem) rest
-            
-        // Try to find the index of the first sequence element that hasn't already been added to the rank graph, if any
-        match variation.Sequence |> List.tryFindIndex (fun elem -> elem |> existsInRankGraph rankGraph |> not) with
-        | None -> []
-        | Some idx -> ([], Set.empty, variation.Sequence |> List.skip idx) |||> addUntilDuplicate rankGraph
-
-    /// Get the rank of a node with a given name
-    static member internal rankOfNode rankGraph node =
-        rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
+        |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> simpleSequence })
 
     /// Compute a global ranking and process skeleton for a list of variations, according to the Algorithm from Mennens 2018 & 2019
     static member internal computeGlobalRankingAndSkeletonForVariations variations =
 
+        /// Get the rank of a node with a given name
+        let rankOfNode (rankGraph: GlobalRankGraph) node =
+            rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
+
         /// Update a node's rank in a rank graph, changing the edges that reference the nodes with it
-        let updateNode rankGraph node newRank =
+        let updateNode (rankGraph: GlobalRankGraph) node newRank =
             let nodeIdx = rankGraph.Nodes |> List.findIndex (fun n -> fst n = node)
             let outEdges = rankGraph.Edges |> List.indexed |> List.filter (fun (_, ((a, _), _, _)) -> a = node) |> List.map (fun (i, ((a, _), b, freq)) -> i, ((a, newRank), b, freq))
             let inEdges = rankGraph.Edges |> List.indexed |> List.filter (fun (_, (_, (b, _), _)) -> b = node) |> List.map (fun (i, (a, (b, _), freq)) -> i, (a, (b, newRank), freq))
@@ -162,10 +158,10 @@ type StableGraphLayout private () =
                 { graph with Edges = graph.Edges |> List.updateAt idx (a, b, existingFreq + freqToIncrement) })
 
         /// Insert a sequence of edges and nodes that have not been seen before in the graph
-        let insertSequence rankGraph components sequence =
+        let insertSequence (rankGraph: GlobalRankGraph) components sequence =
 
             /// Get the lowest rank encountered so far for any node
-            let lowestRank rankGraph =
+            let lowestRank (rankGraph: GlobalRankGraph) =
                 if rankGraph.Nodes.IsEmpty then 0 else rankGraph.Nodes |> List.minBy snd |> snd
 
             /// Find the index of the set that contains a given value in a list of sets, if it exists
@@ -181,7 +177,7 @@ type StableGraphLayout private () =
                         let ((a, _), (b, _), _) = e
                         let n, v = if out then a, b else b, a
                         if n = node && visited |> List.contains v |> not then
-                            let nRank, vRank = n |> StableGraphLayout.rankOfNode rankGraph, v |> StableGraphLayout.rankOfNode rankGraph
+                            let nRank, vRank = n |> rankOfNode rankGraph, v |> rankOfNode rankGraph
                             vRank > nRank && vRank - nRank <= numRanks
                         else false)
 
@@ -202,17 +198,17 @@ type StableGraphLayout private () =
                 (rankGraph, rankGraph.Nodes) ||> List.fold (fun graph (node, _) ->
                     // Shift node's rank down by numRanks, and update newly added edge to reflect new rank
                     if node <> a && visited |> List.contains node then
-                        (node, (StableGraphLayout.rankOfNode graph node) + numRanks) ||> updateNode graph
+                        (node, (rankOfNode graph node) + numRanks) ||> updateNode graph
                     else graph
                 )
 
             /// Merge two previously unconnected components together (Algorithm 2 from Mennens 2018)
             let mergeComponents rankGraph (components: Set<string> list) a b offset =
-                let rankA = StableGraphLayout.rankOfNode rankGraph a
-                let rankB = StableGraphLayout.rankOfNode rankGraph b
+                let rankA = rankOfNode rankGraph a
+                let rankB = rankOfNode rankGraph b
                 let dist = rankA - rankB + offset
                 let rankGraph = (rankGraph, components[b |> findContainingComponentIndex components]) ||> Set.fold (fun graph node ->
-                    updateNode graph node ((StableGraphLayout.rankOfNode graph node) + dist))
+                    updateNode graph node ((rankOfNode graph node) + dist))
                 rankGraph, components
 
             /// Add a new edge to the rank graph, updating the the connected components. Excepts nodes of wedges to already exist, so always add nodes before edges!
@@ -259,13 +255,13 @@ type StableGraphLayout private () =
                 // Add the edges to the rank graph
                 ((rankGraph, components), edges) ||> List.fold (fun (graph, components) (edge, freq) ->
                     match edge with
-                    | Edge (a, b) -> ((a, a |> StableGraphLayout.rankOfNode graph), (b, b |> StableGraphLayout.rankOfNode graph), freq) |> addEdge graph components
+                    | Edge (a, b) -> ((a, a |> rankOfNode graph), (b, b |> rankOfNode graph), freq) |> addEdge graph components
                     | _ -> graph, components)
 
             /// Insert a Type 2 sequence (single edge) into a global rank graph
             let insertSingleEdge rankGraph components (a, b, freq) =
-                let rankA = StableGraphLayout.rankOfNode rankGraph a
-                let rankB = StableGraphLayout.rankOfNode rankGraph b
+                let rankA = rankOfNode rankGraph a
+                let rankB = rankOfNode rankGraph b
                 match rankB - rankA with
                 | 0 -> // Horizontal edge, shift nodes downwards (Algorithm 3 from Mennens 2018)
                     let rankGraph, components = ((a, rankA), (b, rankB), freq) |> addEdge rankGraph components
@@ -288,7 +284,7 @@ type StableGraphLayout private () =
                 let (u, _) = match seq |> List.head with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Starting element must be an edge", nameof seq) |> raise
                 let (y, v) = match seq |> List.last with | Edge (a, b), _ -> a, b | _ -> System.ArgumentException("Last element must be an edge", nameof seq) |> raise
                 let compU, compV = findContainingComponentIndex components u, findContainingComponentIndex components v
-                let rankU, rankV = StableGraphLayout.rankOfNode rankGraph u, StableGraphLayout.rankOfNode rankGraph v
+                let rankU, rankV = rankOfNode rankGraph u, rankOfNode rankGraph v
                 let noOfNodes = seq |> List.choose (fun s -> match s with | Node n, _ -> Some n | _ -> None) |> List.distinct |> List.length
 
                 // Decide what to do based on how the sequence fits into the existing graph
@@ -300,13 +296,13 @@ type StableGraphLayout private () =
                         let rankGraph, components = insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankU + 1) seq
                         let freeRanks = rankV - rankU - 1
                         if noOfNodes > freeRanks then
-                            shiftNodes rankGraph y v (StableGraphLayout.rankOfNode rankGraph y - rankV + 1), components
+                            shiftNodes rankGraph y v (rankOfNode rankGraph y - rankV + 1), components
                         else rankGraph, components
                     else
                         let rankGraph, components = insertSequenceIntoGraph (fun r -> r - 1) rankGraph components (rankU - 1) seq
                         let freeRanks = rankU - rankV - 1
                         if noOfNodes > freeRanks then
-                            shiftNodes rankGraph v y (rankV - StableGraphLayout.rankOfNode rankGraph y + 1), components
+                            shiftNodes rankGraph v y (rankV - rankOfNode rankGraph y + 1), components
                         else rankGraph, components
 
             match sequence with
@@ -314,15 +310,37 @@ type StableGraphLayout private () =
             | [Edge (a, b), freq] -> insertSingleEdge rankGraph components (a, b, freq) // Type 2
             | _ ->
                 match sequence, sequence |> List.rev |> List.head with
-                | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) rankGraph components ((dest |> StableGraphLayout.rankOfNode rankGraph) - 1) (sequence |> List.rev) // Type 3
-                | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components ((orig |> StableGraphLayout.rankOfNode rankGraph) + 1) sequence // Type 4
+                | (Node _, _) :: _, (Edge (_ , dest), _) -> insertSequenceIntoGraph (fun r -> r - 1) rankGraph components ((dest |> rankOfNode rankGraph) - 1) (sequence |> List.rev) // Type 3
+                | (Edge (orig, _), _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components ((orig |> rankOfNode rankGraph) + 1) sequence // Type 4
                 | (Node _, _) :: _, (Node _, _) -> insertSequenceIntoGraph (fun r -> r + 1) rankGraph components (rankGraph |> lowestRank) sequence // Type 5
                 | (Edge _, _) :: _, (Edge _, _) -> insertEdgeToEdge rankGraph components sequence // Type 6
                 | _ -> rankGraph, components
 
+        /// Extract a new continuous sequence that only contains nodes and/or edges that are not yet in the rank graph. Stops when duplicates are encountered. (Mennens 2019, Section 3.1.1)
+        let newSequence rankGraph variation =
+
+            /// Checks whether a given sequence element is already in the rank graph
+            let existsInRankGraph (rg: GlobalRankGraph) = function
+                | Node n, _ -> rg.Nodes |> List.exists (fun (act, _) -> act = n)
+                | Edge (a, b), _ -> rg.Edges |> List.exists (fun ((actA, _), (actB, _), _) -> actA = a && actB = b)
+
+            /// Add sequence elements until a duplicate is encountered, either already in the rank graph, or in the new sequence
+            let rec addUntilDuplicate rankGraph state (seen: Set<_>) seq =
+                match seq with
+                | [] -> state |> List.rev
+                | elem :: rest ->
+                    if elem |> existsInRankGraph rankGraph then state |> List.rev
+                    else if elem |> seen.Contains then elem :: state |> List.rev // Add the duplicate element to "complete" sequence, since it's not in rank graph yet
+                    else addUntilDuplicate rankGraph (elem :: state) (seen.Add elem) rest
+            
+            // Try to find the index of the first sequence element that hasn't already been added to the rank graph, if any
+            match variation.Sequence |> List.tryFindIndex (fun elem -> elem |> existsInRankGraph rankGraph |> not) with
+            | None -> []
+            | Some idx -> ([], Set.empty, variation.Sequence |> List.skip idx) |||> addUntilDuplicate rankGraph
+
         /// Process a variation until no more new sequences can be added to the rank graph
         let rec processVariation variation skeleton (rankGraph, components) =
-            match (rankGraph, variation) ||> StableGraphLayout.newSequence with
+            match (rankGraph, variation) ||> newSequence with
             | [] -> rankGraph, components, skeleton
             | seq ->
                 // Insert the first found new sequence into the graph
@@ -348,18 +366,6 @@ type StableGraphLayout private () =
         match elem with
         | Real(_, idx, _)
         | Virtual(_, idx) -> idx
-
-    /// Get the rank of a sequence node, real or virtual
-    static member internal getRank elem =
-        match elem with
-        | Real(rank, _, _)
-        | Virtual(rank, _) -> rank
-
-    /// Get the name of a sequence node, if it is real
-    static member internal getName elem =
-        match elem with
-        | Real(_, _, name) -> Some name
-        | _ -> None
 
     /// Compute a node sequence graph given a global rank graph and the process skeleton
     static member internal computeNodeSequenceGraph rg skeleton =
@@ -439,8 +445,12 @@ type StableGraphLayout private () =
             (nsg, edges) ||> List.fold (fun nsg edge ->
                 match edge with
                 | Edge (a, b), _ ->
+                    /// Get the rank of a node with a given name
+                    let rankOfNode (rankGraph: GlobalRankGraph) node =
+                        rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
+
                     // Find the ranks of A and B in the global rank graph
-                    let rankA, rankB = StableGraphLayout.rankOfNode rg a, StableGraphLayout.rankOfNode rg b
+                    let rankA, rankB = rankOfNode rg a, rankOfNode rg b
 
                     // Add the real nodes of the edge origin and destination if they don't already exist, or replace
                     let nsg, nodeA = addOrReplaceRealNode nsg rankA idx a
@@ -466,6 +476,18 @@ type StableGraphLayout private () =
     /// Compute a global order given a global rank graph and a node sequence graph based on this global rank graph
     static member internal computeGlobalOrder (rankGraph: GlobalRankGraph) (nsg: NodeSequenceGraph) : GlobalOrderNodeSequenceGraph =
 
+        /// Get the rank of a sequence node, real or virtual
+        let getRank elem =
+            match elem with
+            | Real(rank, _, _)
+            | Virtual(rank, _) -> rank
+
+        /// Get the name of a sequence node, if it is real
+        let getName elem =
+            match elem with
+            | Real(_, _, name) -> Some name
+            | _ -> None
+
         /// Get the list of nodes belonging to the same sequence as a given node, sorted by their rank 
         let nodeSequence (nsg: NodeSequenceGraph) (node: SequenceNode) =
             let nodeDiscoveryIdx = StableGraphLayout.getDiscoveryIndex node
@@ -474,7 +496,7 @@ type StableGraphLayout private () =
                 match n with
                 | Real(_, idx, _)
                 | Virtual(_, idx) -> idx = nodeDiscoveryIdx)
-            |> List.sortBy (fun n -> StableGraphLayout.getRank n)
+            |> List.sortBy (fun n -> getRank n)
 
         /// Compute the sequence connectedness of two sequences (Definition 4.2.4 of Mennens 2018)
         let sequenceConnectedness (rg: GlobalRankGraph) (nsg: NodeSequenceGraph) (s1: SequenceNode list) (s2: SequenceNode list) =
@@ -482,7 +504,7 @@ type StableGraphLayout private () =
             // Only get edges that start in one node sequence and end in the other
             |> List.filter (fun (a, b) -> List.contains a s1 && List.contains b s2 || List.contains b s1 && List.contains a s2)
             |> List.sumBy (fun (a, b) ->
-                match StableGraphLayout.getName a, StableGraphLayout.getName b with
+                match getName a, getName b with
                 | Some a, Some b -> rg.Edges |> List.find (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) |> fun (_, _, freq) -> freq
                 | _ -> 0)
 
@@ -548,7 +570,7 @@ type StableGraphLayout private () =
                 let updatedNodesOnRight =
                     goNsg.Nodes
                     |> List.indexed
-                    |> List.filter (fun (_, (pos, n)) -> pos > 0 && n |> StableGraphLayout.getRank = rank)
+                    |> List.filter (fun (_, (pos, n)) -> pos > 0 && n |> getRank = rank)
                     |> List.sortBy (fun (_, (pos, _)) -> pos)
                     |> List.mapi (fun i (idx, (_, node)) -> idx, (i + 1, node)) // Assign position based on iteration index + 1, discarding previous position
 
@@ -562,13 +584,13 @@ type StableGraphLayout private () =
 
                 // Find the index of the node to move in the existing graph so that it can later be updated
                 let newNodeIdx = graph.Nodes |> List.findIndex (fun (_, n) -> n = newNode)
-                let newNodeRank = StableGraphLayout.getRank newNode
+                let newNodeRank = getRank newNode
 
                 // Find the nodes on the same rank that already are on the left side of the backbone
                 let nodesLeftOnSameRank =
                     graph.Nodes
                     |> List.indexed
-                    |> List.filter (fun (_, (x, n)) -> x < 0 && StableGraphLayout.getRank n = StableGraphLayout.getRank newNode)
+                    |> List.filter (fun (_, (x, n)) -> x < 0 && getRank n = getRank newNode)
 
                 // If there is an existing node with a lower order index, place the new node to the left of it and shift all other nodes one to the left
                 // Otherwise, the node can be placed right next to the backbone at position -1
@@ -606,7 +628,7 @@ type StableGraphLayout private () =
         // The list of nodes that belong to the backbone
         let backbone =
             nsg.Nodes
-            |> List.groupBy StableGraphLayout.getRank
+            |> List.groupBy getRank
             |> List.map (fun (_, nodes) -> nodes |> List.minBy StableGraphLayout.getDiscoveryIndex)
 
         // The set of sequences belonging to the backbone
@@ -615,7 +637,7 @@ type StableGraphLayout private () =
         // The nodes on each rank, sorted by backbone connectedness
         let nodesByRankSorted =
             nsg.Nodes
-            |> List.groupBy StableGraphLayout.getRank
+            |> List.groupBy getRank
             |> List.sortBy fst
             |> List.map (fun (rank, nodes) -> rank, nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n))
 
@@ -628,13 +650,46 @@ type StableGraphLayout private () =
         // Balance the components by moving some to the left
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
+    /// Convert a completed global order graph into a more friendly format for consumers
+    static member internal convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) : GlobalOrder =
+
+        let filterForVirtual list =
+            list |> List.choose (fun n -> match n with | Virtual _ -> Some n | _ -> None)
+
+        let filterForReal list =
+            list |> List.choose (fun n -> match n with | Real _ -> Some n | _ -> None)
+
+        // Virtual nodes are essentially waypoints for edges to navigate when drawing an edge between two nodes. Therefore, find all edges that use a sequence of waypoints and put them together.
+        let rec getVirtualComponents (graph: GlobalOrderNodeSequenceGraph) (node: SequenceNode) (visited: SequenceNode list) =
+            let visited = node :: visited
+            let linkedNodes =
+                graph.Edges
+                |> List.choose (fun ((_, a), (_, b)) -> if a = node then Some b else if b = node then Some a else None)
+                |> List.filter (fun n -> visited |> List.contains n |> not)
+
+            match linkedNodes with
+            | [] -> visited
+            | _ -> (visited @ (linkedNodes |> filterForReal), linkedNodes |> filterForVirtual) ||> List.fold (fun vis node -> getVirtualComponents graph node vis)
+
+        let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Coordinates = x, y } | _ -> None)
+        let virtualNodes =
+            graph.Nodes
+            |> List.map snd
+            |> filterForVirtual
+            |> List.map (fun n -> getVirtualComponents graph n [])
+
+        { Nodes = nodes; EdgeWaypoints = [] }
+
+    /// Compute a friendly-format global order based on a global rank graph and process skeleton
+    static member internal computeGlobalOrderBasedOnRankGraphAndSkeleton (gr: GlobalRankGraph, skeleton) =
+        let nsg = (gr, skeleton) ||> StableGraphLayout.computeNodeSequenceGraph
+        (gr, nsg) ||> StableGraphLayout.computeGlobalOrder |> StableGraphLayout.convertGlobalOrderToFriendlyFormat
+
     /// <summary>
     /// Compute a Global Ranking for all activities in an event log, merging the flattened logs of all object types together to get a total view.
     /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
     /// </summary>
-    static member ComputeGlobalRanking (log: OcelLog) =
+    static member internal computeGlobalRanking (log: OcelLog) =
         log.ObjectTypes
         |> List.ofSeq
         |> List.map (fun t -> OcelHelpers.Flatten log t |> StableGraphLayout.variationsInLog (Some t))
@@ -645,10 +700,8 @@ type StableGraphLayout private () =
     /// <summary>
     /// Compute a Global Ranking for all activities in an event log, flattening for a specific object type.
     /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
     /// </summary>
-    static member ComputeGlobalRankingForObjectType (log: OcelLog) objectType =
+    static member internal computeGlobalRankingForObjectType (log: OcelLog) objectType =
         OcelHelpers.Flatten log objectType
         |> StableGraphLayout.variationsInLog None
         |> List.sortByDescending StableGraphLayout.importanceSort
@@ -657,15 +710,46 @@ type StableGraphLayout private () =
     /// <summary>
     /// Compute a Global Ranking for each object type in an event log.
     /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// </summary>
+    static member internal computeGlobalRankingForEachObjectType (log: OcelLog) =
+        log.ObjectTypes |> Seq.map (fun ot -> ot, StableGraphLayout.computeGlobalRankingForObjectType log ot) |> Map.ofSeq
+
+    (* --- Public members --- *)
+
+    /// <summary>
+    /// Compute a global order for an event log, flattening for a specific object type.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
     /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
     /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
     /// </summary>
-    static member ComputeGlobalRankingForEachObjectType (log: OcelLog) =
-        log.ObjectTypes |> Seq.map (fun ot -> ot, StableGraphLayout.ComputeGlobalRankingForObjectType log ot) |> Map.ofSeq
+    static member ComputeGlobalOrder (log: OcelLog) =
+        log |> StableGraphLayout.computeGlobalRanking |> StableGraphLayout.computeGlobalOrderBasedOnRankGraphAndSkeleton
 
     /// <summary>
-    /// Compute a stable graph layout for the discovered graph.
+    /// Compute a global order, flattening for a specific object type.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
     /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
+    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
     /// </summary>
-    static member Compute (graph: DirectedGraph<Node, Edge>) =
-        0
+    static member ComputeGlobalOrderForObjectType(log: OcelLog, objType) =
+        (log, objType) ||> StableGraphLayout.computeGlobalRankingForObjectType |> StableGraphLayout.computeGlobalOrderBasedOnRankGraphAndSkeleton
+
+    /// <summary>
+    /// Compute a global order for each object type in an event log.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
+    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
+    /// </summary>
+    static member ComputeGlobalOrderForEachObjectType (log: OcelLog) =
+        log |> StableGraphLayout.computeGlobalRankingForEachObjectType |> Map.map (fun _ v -> StableGraphLayout.computeGlobalOrderBasedOnRankGraphAndSkeleton v)
+
+    (* --- Overloads for C# OCEL log type --- *)
+
+    static member ComputeGlobalOrder (log: OCEL.CSharp.OcelLog) =
+        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> StableGraphLayout.ComputeGlobalOrder
+
+    static member ComputeGlobalOrderForObjectType(log: OCEL.CSharp.OcelLog, objType) =
+         StableGraphLayout.ComputeGlobalOrderForObjectType(log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog, objType)
+
+    static member ComputeGlobalOrderForEachObjectType (log: OCEL.CSharp.OcelLog) =
+        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> StableGraphLayout.ComputeGlobalOrderForEachObjectType |> Map.toSeq |> dict
