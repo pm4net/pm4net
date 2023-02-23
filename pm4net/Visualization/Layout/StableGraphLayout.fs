@@ -55,8 +55,8 @@ type StableGraphLayout private () =
 
     /// Sort traces based on their importance (sum of w^2 * |v|^2)
     static member internal importanceSort variation =
-        let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0 | Edge _, freq -> pown freq 2)
-        let vLenSquared = pown variation.Events.Length 2
+        let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0L | Edge _, freq -> pown (freq |> int64) 2)
+        let vLenSquared = pown (variation.Events.Length |> int64) 2
         wSquaredSum * vLenSquared
 
     /// Removes direct repetitions in a list (e.g. [A,A,B,C,C] -> [A,B,C]). Section 2.1 of Mennens 2018.
