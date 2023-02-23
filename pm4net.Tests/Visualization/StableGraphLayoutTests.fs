@@ -34,96 +34,32 @@ module Assertions =
 
 module ``Stable graph layout tests`` =
 
-    module ``For each object type`` =
+    [<Fact>]
+    let ``Can discover global order from Blazor log`` () =
+        let json = File.ReadAllText("blazor-logs.jsonocel")
+        let log = OcelJson.deserialize true json
+        let log = log.MergeDuplicateObjects()
+        let globalOrder = StableGraphLayout.ComputeGlobalOrder log
+        globalOrder |> Assert.NotNull
 
-        [<Fact>]
-        let ``Can discover stable graph layout from Blazor log for each object type`` () =
-            let json = File.ReadAllText("blazor-logs.jsonocel")
-            let log = OcelJson.deserialize true json
-            let log = log.MergeDuplicateObjects()
-            let gr = StableGraphLayout.computeGlobalRankingForEachObjectType log
-            Assertions.assertGraphMap gr
+    [<Fact>]
+    let ``Can discover global order from 'GitHub pm4py' log`` () =
+        let json = File.ReadAllText("github_pm4py.jsonocel")
+        let log = OcelJson.deserialize true json
+        let globalOrder = StableGraphLayout.ComputeGlobalOrder log
+        globalOrder |> Assert.NotNull
 
-        [<Fact>]
-        let ``Can discover stable graph layout from 'GitHub pm4py' log for each object type`` () =
-            let json = File.ReadAllText("github_pm4py.jsonocel")
-            let log = OcelJson.deserialize true json
-            let gr = StableGraphLayout.computeGlobalRankingForEachObjectType log
-            Assertions.assertGraphMap gr
+    [<Fact>]
+    let ``Can discover global order from 'recruiting' log`` () =
+        let json = File.ReadAllText("recruiting.jsonocel")
+        let log = OcelJson.deserialize true json
+        let globalOrder = StableGraphLayout.ComputeGlobalOrder log
+        globalOrder |> Assert.NotNull
 
-        [<Fact>]
-        let ``Can discover stable graph layout from 'recruiting' log for each object type`` () =
-            let json = File.ReadAllText("recruiting.jsonocel")
-            let log = OcelJson.deserialize true json
-            let gr, skeleton = StableGraphLayout.computeGlobalRanking log
-            Assertions.assertGlobalRank gr
-
-    module ``Combine all object types`` =
-
-        [<Fact>]
-        let ``Can discover stable graph layout from Blazor log`` () =
-            let json = File.ReadAllText("blazor-logs.jsonocel")
-            let log = OcelJson.deserialize true json
-            let log = log.MergeDuplicateObjects()
-            let gr, skeleton = StableGraphLayout.computeGlobalRanking log
-            Assertions.assertGlobalRank gr
-
-        [<Fact>]
-        let ``Can discover stable graph layout from 'GitHub pm4py' log`` () =
-            let json = File.ReadAllText("github_pm4py.jsonocel")
-            let log = OcelJson.deserialize true json
-            let gr, skeleton = StableGraphLayout.computeGlobalRanking log
-            Assertions.assertGlobalRank gr
-
-        [<Fact>]
-        let ``Can discover stable graph layout from 'recruiting' log`` () =
-            let json = File.ReadAllText("recruiting.jsonocel")
-            let log = OcelJson.deserialize true json
-            let gr, skeleton = StableGraphLayout.computeGlobalRanking log
-            Assertions.assertGlobalRank gr
-
-    module ``Node sequence graph`` =
-
-        [<Fact>]
-        let ``Can discover node sequence graph from 'GitHub pm4py' log`` () =
-            let json = File.ReadAllText("github_pm4py.jsonocel")
-            let log = OcelJson.deserialize true json
-            let gr, skeleton = StableGraphLayout.computeGlobalRanking log
-            let nsg = StableGraphLayout.computeNodeSequenceGraph gr skeleton
-            nsg |> Assert.NotNull
-
-    module ``Global order`` =
-
-        [<Fact>]
-        let ``Can discover global order from Blazor log`` () =
-            let json = File.ReadAllText("blazor-logs.jsonocel")
-            let log = OcelJson.deserialize true json
-            let log = log.MergeDuplicateObjects()
-            let gr, skeleton = StableGraphLayout.computeGlobalRanking log
-            let nsg = StableGraphLayout.computeNodeSequenceGraph gr skeleton
-            let globalOrder = StableGraphLayout.computeGlobalOrder gr nsg
-            globalOrder |> Assert.NotNull
-
-    module ``Global order - user facing`` =
-
-        [<Fact>]
-        let ``Can discover global order from Blazor log`` () =
-            let json = File.ReadAllText("blazor-logs.jsonocel")
-            let log = OcelJson.deserialize true json
-            let log = log.MergeDuplicateObjects()
-            let globalOrder = StableGraphLayout.ComputeGlobalOrder log
-            globalOrder |> Assert.NotNull
-
-        [<Fact>]
-        let ``Can discover global order from 'GitHub pm4py' log`` () =
-            let json = File.ReadAllText("github_pm4py.jsonocel")
-            let log = OcelJson.deserialize true json
-            let globalOrder = StableGraphLayout.ComputeGlobalOrder log
-            globalOrder |> Assert.NotNull
-
-        [<Fact>]
-        let ``Can discover global order from 'recruiting' log`` () =
-            let json = File.ReadAllText("recruiting.jsonocel")
-            let log = OcelJson.deserialize true json
-            let globalOrder = StableGraphLayout.ComputeGlobalOrder log
-            globalOrder |> Assert.NotNull
+    [<Fact>]
+    let ``Can discover global order from 'GitHub pm4py' log and discovered DFG`` () =
+        let json = File.ReadAllText("github_pm4py.jsonocel")
+        let log = OcelJson.deserialize true json
+        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
+        let globalOrder = StableGraphLayout.ComputeGlobalOrder(log, dfg)
+        globalOrder |> Assert.NotNull
