@@ -2,7 +2,7 @@ namespace pm4net.Algorithms.Discovery.Ocel
 
 open System
 open OCEL.Types
-open pm4net.Types.Dfg
+open pm4net.Types.Graphs
 open pm4net.Utilities
 
 [<AbstractClass; Sealed>]

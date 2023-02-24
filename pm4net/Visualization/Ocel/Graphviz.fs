@@ -2,7 +2,7 @@ namespace pm4net.Visualization.Ocel
 
 open System
 open pm4net.Types
-open pm4net.Types.Dfg
+open pm4net.Types.Graphs
 open pm4net.Types.Trees
 open DotNetGraph
 open DotNetGraph.Node

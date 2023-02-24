@@ -1,12 +1,11 @@
 namespace pm4net.Tests
 
 open OCEL
-open pm4net.Types.Dfg
-open pm4net.Visualization.Layout
-
-open System.Collections.Generic
-open System.IO
 open Xunit
+open System.IO
+open System.Collections.Generic
+open pm4net.Types.GraphLayout
+open pm4net.Algorithms.Layout
 
 module Assertions =
 
