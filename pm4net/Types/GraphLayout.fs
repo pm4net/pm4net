@@ -29,16 +29,22 @@ type internal GlobalOrderNodeSequenceGraph = DirectedGraph<int * SequenceNode> /
 
 (* --- Public types to expose to the callers --- *)
 
+/// A point in a coordinate system
+type Coordinate = {
+    X: int
+    Y: int
+}
+
 /// A node within a directed graph that has an associated name and X,Y position (origin in top-left).
 type Node = {
     Name: string
-    Coordinates: int * int
+    Position: Coordinate
 }
 
 /// A path between two nodes with several waypoints which the edge should go through.
 type EdgePath = {
     Edge: string * string
-    Waypoints: (int * int) seq
+    Waypoints: Coordinate seq
 }
 
 /// A global order defines a collection of nodes and their position, as well as paths between nodes where non-straight edges are required.

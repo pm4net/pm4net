@@ -588,7 +588,7 @@ module internal GraphLayoutAlgo =
             /// Get the X,Y coordinates of a sequence node in the global order graph
             let getCoordinatesOfNode (graph: GlobalOrderNodeSequenceGraph) (node: SequenceNode) =
                 let (x, n) = graph.Nodes |> List.find (fun (_, n) -> n = node)
-                x, n |> getRank
+                { X = x; Y = n |> getRank }
 
             /// Merge multiple reachability sets together by seeing whether any virtual nodes are in multiple sets, and join those together
             let mergeReachabilitySets (sets: Set<SequenceNode> list) =
@@ -606,7 +606,7 @@ module internal GraphLayoutAlgo =
                 | _, [] -> []
                 | num, (head :: tail) -> List.map ((@) [head]) (combinations (num - 1) tail) @ combinations num tail
 
-            let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Coordinates = x, y } | _ -> None)
+            let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Position = { X = x; Y = y } } | _ -> None)
             let edgePaths =
                 graph.Nodes
                 |> List.map snd
