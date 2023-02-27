@@ -636,8 +636,8 @@ module internal GraphLayoutAlgo =
         let getNodeName node =
             match node with
             | EventNode node -> node.Name
-            | StartNode objType -> $"{Constants.objectTypeStartNode} {objType}"
-            | EndNode objType -> $"{Constants.objectTypeEndNode} {objType}"
+            | StartNode objType -> Constants.objectTypeStartNode + objType
+            | EndNode objType -> Constants.objectTypeEndNode + objType
 
         let horizontalEdgesByRank =
             model.Edges

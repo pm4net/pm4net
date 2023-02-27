@@ -30,7 +30,7 @@ module Constants =
     let level = "pm4net_Level"
 
     [<Literal>]
-    let objectTypeStartNode = "pm4net_Start"
+    let objectTypeStartNode = "pm4net_Start-"
 
     [<Literal>]
-    let objectTypeEndNode = "pm4net_End"
+    let objectTypeEndNode = "pm4net_End-"
