@@ -1,4 +1,4 @@
-namespace pm4net.Types.Dfg
+namespace pm4net.Types.Graphs
 
 open System
 open pm4net.Types

@@ -1,5 +1,5 @@
 using OCEL.CSharp;
-using pm4net.Visualization.Layout;
+using pm4net.Algorithms.Layout;
 
 namespace pm4net.CSharpTests
 {

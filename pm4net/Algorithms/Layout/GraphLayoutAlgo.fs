@@ -1,105 +1,14 @@
-namespace pm4net.Visualization.Layout
+namespace pm4net.Algorithms.Layout
 
-open System.Runtime.CompilerServices
-open OCEL.Types
 open pm4net.Types
-open pm4net.Types.Dfg
-open pm4net.Utilities
+open pm4net.Types.Graphs
+open pm4net.Types.GraphLayout
 
-[<assembly: InternalsVisibleTo("pm4net.Tests")>]
-do()
-
-/// A directed graph that represents the global rank graph. Nodes consist of activity name and rank, and edges store their frequency.
-type internal GlobalRankGraph = DirectedGraph<string * int, int>
-
-/// Type to represent a sequence of nodes and edges, where an edge consists of two nodes
-type internal SequenceElement<'a> =
-    | Node of 'a
-    | Edge of 'a * 'a
-
-/// Type to represent a variation of a trace, with all its events, a sequence of nodes and edges, and the frequency of the variation
-type internal Variation<'a, 'b> = {
-    Events: 'a list
-    Sequence: (SequenceElement<'a> * 'b) list
-    Frequency: int
-}
-
-/// Types of nodes that can be found in a node sequence graph
-type internal SequenceNode =
-    | Real of Rank: int * DiscoveryIndex: int * Name: string
-    | Virtual of Rank: int * DiscoveryIndex: int
-
-/// An undirected graph that represents the node sequence graph of a given rank graph and skeleton (data structure is technically directed, but use edges as two-way connections)
-type internal NodeSequenceGraph = DirectedGraph<SequenceNode>
-type internal GlobalOrderNodeSequenceGraph = DirectedGraph<int * SequenceNode> // Integer indicates the X position of the node
-
-// Public types to expose to the callers
-
-type Node = {
-    Name: string
-    Coordinates: int * int
-}
-
-type EdgeWaypoint = {
-    Edge: string * string
-    Waypoints: (int * int) seq
-}
-
-type GlobalOrder = {
-    Nodes: Node seq
-    EdgeWaypoints: EdgeWaypoint seq
-}
-
-[<AbstractClass; Sealed>]
-type StableGraphLayout private () =
-
-    /// Sort traces based on their importance (sum of w^2 * |v|^2)
-    static member private importanceSort variation =
-        let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0L | Edge _, freq -> pown (freq |> int64) 2)
-        let vLenSquared = pown (variation.Events.Length |> int64) 2
-        wSquaredSum * vLenSquared
-
-    /// Removes direct repetitions in a list (e.g. [A,A,B,C,C] -> [A,B,C]). Section 2.1 of Mennens 2018.
-    static member private removeDirectRepetitions comparer trace =
-        ([], trace) ||> List.fold (fun state nextValue ->
-            match state |> List.tryLast with
-            | None -> [nextValue]
-            | Some last -> if comparer last nextValue then state else state @ [nextValue])
-
-    /// Extract the unique variations in the flattened log and order them by importance
-    static member private variationsInLog objType log =
-
-        /// Compute the sequence of a trace, not accounting for the existing global rank graph (interleaved nodes and edges) (Definition 4.1.2 of Mennes 2018)
-        let simpleSequence freq trace =
-            match trace with
-            | [] -> []
-            | [single] -> [Node(single), freq]
-            | _ -> 
-                trace
-                |> List.pairwise
-                |> List.mapi (fun i (a, b) ->
-                    match i with
-                    | 0 -> [Node(a), 0; Edge(a, b), freq; Node(b), 0]
-                    | _ -> [Edge(a, b), freq; Node(b), 0])
-                |> List.concat
-
-        log
-        |> OcelHelpers.OrderedTracesOfFlattenedLog // Get traces based on referenced object
-        |> Helpers.mapNestedList snd // Discard the event ID as it is not relevant
-        |> List.map (fun events -> events |> StableGraphLayout.removeDirectRepetitions (fun a b -> a.Activity = b.Activity)) // Remove direct repetitions of events with the same activity
-        |> List.map (fun events ->
-            // Add a start and end node for the object type to each trace, if it is specified
-            match objType with
-            | Some objType ->
-                let startEvent = { Activity = $"{Constants.objectTypeStartNode} {objType}"; Timestamp = (events |> List.head |> fun e -> e.Timestamp.AddTicks(-1)); OMap = []; VMap = Map.empty }
-                let endEvent = { Activity = $"{Constants.objectTypeEndNode} {objType}"; Timestamp = (events |> List.last |> fun e -> e.Timestamp.AddTicks(1)); OMap = []; VMap = Map.empty }
-                startEvent :: events @ [endEvent]
-            | None -> events)
-        |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
-        |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> simpleSequence })
+/// An implementation of the "stable graph layout algorithm for processes" introduced by Mennens 2019 (https://doi.org/10.1111/cgf.13723), implemented by Johannes Mols.
+module internal GraphLayoutAlgo =
 
     /// Update a node's rank in a rank graph, changing the edges that reference the nodes with it
-    static member private updateNode (rankGraph: GlobalRankGraph) node newRank =
+    let private updateNode (rankGraph: GlobalRankGraph) node newRank =
         let nodeIdx = rankGraph.Nodes |> List.findIndex (fun n -> fst n = node)
         let outEdges = rankGraph.Edges |> List.indexed |> List.filter (fun (_, ((a, _), _, _)) -> a = node) |> List.map (fun (i, ((a, _), b, freq)) -> i, ((a, newRank), b, freq))
         let inEdges = rankGraph.Edges |> List.indexed |> List.filter (fun (_, (_, (b, _), _)) -> b = node) |> List.map (fun (i, (a, (b, _), freq)) -> i, (a, (b, newRank), freq))
@@ -109,7 +18,7 @@ type StableGraphLayout private () =
         }
 
     /// Insert a sequence of edges and nodes that have not been seen before in the graph
-    static member private insertSequence (rankGraph: GlobalRankGraph) components sequence =
+    let private insertSequence (rankGraph: GlobalRankGraph) components sequence =
 
         /// Get the rank of a node with a given name
         let rankOfNode (rankGraph: GlobalRankGraph) node =
@@ -153,7 +62,7 @@ type StableGraphLayout private () =
             (rankGraph, rankGraph.Nodes) ||> List.fold (fun graph (node, _) ->
                 // Shift node's rank down by numRanks, and update newly added edge to reflect new rank
                 if node <> a && visited |> List.contains node then
-                    (node, (rankOfNode graph node) + numRanks) ||> StableGraphLayout.updateNode graph
+                    (node, (rankOfNode graph node) + numRanks) ||> updateNode graph
                 else graph
             )
 
@@ -163,7 +72,7 @@ type StableGraphLayout private () =
             let rankB = rankOfNode rankGraph b
             let dist = rankA - rankB + offset
             let rankGraph = (rankGraph, components[b |> findContainingComponentIndex components]) ||> Set.fold (fun graph node ->
-                StableGraphLayout.updateNode graph node ((rankOfNode graph node) + dist))
+                updateNode graph node ((rankOfNode graph node) + dist))
             rankGraph, components
 
         /// Add a new edge to the rank graph, updating the the connected components. Excepts nodes of wedges to already exist, so always add nodes before edges!
@@ -272,18 +181,42 @@ type StableGraphLayout private () =
             | _ -> rankGraph, components
 
     /// Normalize the ranks of a rank graph so that the first node is always on rank 0 (can become negative during processing), and so that there are no gaps in the ranks
-    static member private normalizeRanks (rankGraph: GlobalRankGraph) =
+    let private normalizeRanks (rankGraph: GlobalRankGraph) =
         let nodes = rankGraph.Nodes |> List.sortBy snd
         let currentRank = match nodes |> List.tryHead with | Some(_, r) -> r | _ -> 0
         ((rankGraph, currentRank, 0), nodes) ||> List.fold (fun (rankGraph, currentRank, targetRank) (node, rank) ->
             if rank = currentRank then
-                if rank <> targetRank then StableGraphLayout.updateNode rankGraph node targetRank, currentRank, targetRank
+                if rank <> targetRank then updateNode rankGraph node targetRank, currentRank, targetRank
                 else rankGraph, currentRank, targetRank
-            else StableGraphLayout.updateNode rankGraph node (targetRank + 1), rank, targetRank + 1
+            else updateNode rankGraph node (targetRank + 1), rank, targetRank + 1
         ) |> fun (rg, _, _) -> rg
 
-    /// Compute a global ranking and process skeleton for a list of variations, according to the Algorithm from Mennens 2018 & 2019
-    static member internal computeGlobalRankingAndSkeletonForVariations variations =
+    /// Get the rank of a sequence node, real or virtual
+    let private getRank elem =
+        match elem with
+        | Real(rank, _, _)
+        | Virtual(rank, _) -> rank
+
+    /// Get the discovery index of a sequence node, real or virtual
+    let private getDiscoveryIndex elem =
+        match elem with
+        | Real(_, idx, _)
+        | Virtual(_, idx) -> idx
+
+    /// Get the name of a sequence node, if it is real
+    let private getName elem =
+        match elem with
+        | Real(_, _, name) -> Some name
+        | _ -> None
+
+    /// Sort traces based on their importance (sum of w^2 * |v|^2)
+    let internal importanceSort variation =
+        let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0L | Edge _, freq -> pown (freq |> int64) 2)
+        let vLenSquared = pown (variation.Events.Length |> int64) 2
+        wSquaredSum * vLenSquared
+
+    /// Compute a global ranking, process skeleton, and connected components for a list of variations, according to the Algorithm from Mennens 2018 & 2019
+    let internal computeGlobalRankingAndSkeletonForVariations variations =
 
         /// Reverse the order of nodes and edges in the graph, as they are added to the beginning of the list when discovering (purely for intuitiveness)
         let reverseNodeAndEdgeOrder rankGraph : DirectedGraph<_,_> =
@@ -344,7 +277,7 @@ type StableGraphLayout private () =
             | [] -> rankGraph, components, skeleton
             | seq ->
                 // Insert the first found new sequence into the graph
-                let rankGraph, components = seq |> StableGraphLayout.insertSequence rankGraph components
+                let rankGraph, components = seq |> insertSequence rankGraph components
                 // Add the sequence to the skeleton if it contains at least one node (Definition 4.2.1 of Mennens 2018)
                 let skeleton = if seq |> List.exists (fun elem -> match elem with | Node _, _ -> true | _ -> false) then skeleton @ [seq] else skeleton
                 // Process the variation again until there are no more new sequences available in the variation
@@ -359,56 +292,10 @@ type StableGraphLayout private () =
                 graph, components, skeleton)
 
         // Normalize the rank graph and order nodes and edges correctly, and return it together with the skeleton
-        rankGraph |> StableGraphLayout.normalizeRanks |> reverseNodeAndEdgeOrder, skeleton, components
-
-    /// Check the edges of a discovered model, and fix any horizontal edges that might be present due to filtering (Algorithm 6 from Mennens 2018)
-    static member internal fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel (rankGraph: GlobalRankGraph) components (model: DirectedGraph<Dfg.Node, Dfg.Edge>) =
-
-        /// Get the name of the DFG node as it would have been added to the global rank graph
-        let getNodeName node =
-            match node with
-            | EventNode node -> node.Name
-            | StartNode objType -> $"{Constants.objectTypeStartNode} {objType}"
-            | EndNode objType -> $"{Constants.objectTypeEndNode} {objType}"
-
-        let horizontalEdgesByRank =
-            model.Edges
-            |> List.map (fun (a, b, e) ->
-                let nodeA = rankGraph.Nodes |> List.find (fun (n, _) -> n = getNodeName a)
-                let nodeB = rankGraph.Nodes |> List.find (fun (n, _) -> n = getNodeName b) 
-                (a, b, e), (nodeA, nodeB))
-            |> List.filter (fun (_, (nodeA, nodeB)) -> (nodeA = nodeB) |> not && snd nodeA = snd nodeB)
-            |> List.groupBy (fun (_, (a, _)) -> snd a) // Group by rank
-            |> List.map (fun (_, v) -> v)
-
-        // For each horizontal edge found, insert the single-edge sequence into the global rank graph to fix it
-        ((rankGraph, components), horizontalEdgesByRank) ||> List.fold (fun (graph, components) horizontalEdges ->
-            let edgesSortedbyFrequency = horizontalEdges |> List.sortByDescending (fun ((_, _, e), _) -> e.Statistics.Frequency)
-            ((graph, components), edgesSortedbyFrequency) ||> List.fold (fun (graph, components) ((a, b, edge), _) ->
-                let seq = [Edge(getNodeName a, getNodeName b), edge.Statistics.Frequency]
-                seq |> StableGraphLayout.insertSequence graph components))
-        |> fun (rg, comp) -> rg |> StableGraphLayout.normalizeRanks, comp
-
-    /// Get the rank of a sequence node, real or virtual
-    static member internal getRank elem =
-        match elem with
-        | Real(rank, _, _)
-        | Virtual(rank, _) -> rank
-
-    /// Get the discovery index of a sequence node, real or virtual
-    static member internal getDiscoveryIndex elem =
-        match elem with
-        | Real(_, idx, _)
-        | Virtual(_, idx) -> idx
-
-    /// Get the name of a sequence node, if it is real
-    static member internal getName elem =
-        match elem with
-        | Real(_, _, name) -> Some name
-        | _ -> None
+        rankGraph |> normalizeRanks |> reverseNodeAndEdgeOrder, skeleton, components
 
     /// Compute a node sequence graph given a global rank graph and the process skeleton
-    static member internal computeNodeSequenceGraph rg skeleton =
+    let internal computeNodeSequenceGraph rankGraph skeleton =
 
         /// Try to find an edge between two nodes, disregarding the direction of the edge
         let tryFindEdge (nsg: NodeSequenceGraph) nodeA nodeB =
@@ -490,14 +377,14 @@ type StableGraphLayout private () =
                         rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
 
                     // Find the ranks of A and B in the global rank graph
-                    let rankA, rankB = rankOfNode rg a, rankOfNode rg b
+                    let rankA, rankB = rankOfNode rankGraph a, rankOfNode rankGraph b
 
                     // Add the real nodes of the edge origin and destination if they don't already exist, or replace
                     let nsg, nodeA = addOrReplaceRealNode nsg rankA idx a
                     let nsg, nodeB = addOrReplaceRealNode nsg rankB idx b
 
                     // Determine whether the target node is in the same "column", i.e. has the same discovery index. If not, the last edge must merge the connection
-                    let targetA, targetB = StableGraphLayout.getDiscoveryIndex nodeA, StableGraphLayout.getDiscoveryIndex nodeB
+                    let targetA, targetB = getDiscoveryIndex nodeA, getDiscoveryIndex nodeB
 
                     // Add a connection between the two nodes, and insert virtual nodes where required
                     match abs(rankA - rankB) with
@@ -513,18 +400,18 @@ type StableGraphLayout private () =
             )
         )
 
-    /// Compute a global order given a global rank graph and a node sequence graph based on this global rank graph
-    static member internal computeGlobalOrder (rankGraph: GlobalRankGraph) (nsg: NodeSequenceGraph) : GlobalOrderNodeSequenceGraph =
+    /// Compute a global order given a global rank graph and a node sequence graph
+    let internal computeGlobalOrder (rankGraph: GlobalRankGraph) (nsg: NodeSequenceGraph) =
 
         /// Get the list of nodes belonging to the same sequence as a given node, sorted by their rank 
         let nodeSequence (nsg: NodeSequenceGraph) (node: SequenceNode) =
-            let nodeDiscoveryIdx = StableGraphLayout.getDiscoveryIndex node
+            let nodeDiscoveryIdx = getDiscoveryIndex node
             nsg.Nodes
             |> List.filter (fun n ->
                 match n with
                 | Real(_, idx, _)
                 | Virtual(_, idx) -> idx = nodeDiscoveryIdx)
-            |> List.sortBy (fun n -> StableGraphLayout.getRank n)
+            |> List.sortBy (fun n -> getRank n)
 
         /// Compute the sequence connectedness of two sequences (Definition 4.2.4 of Mennens 2018)
         let sequenceConnectedness (rg: GlobalRankGraph) (nsg: NodeSequenceGraph) (s1: SequenceNode list) (s2: SequenceNode list) =
@@ -532,7 +419,7 @@ type StableGraphLayout private () =
             // Only get edges that start in one node sequence and end in the other
             |> List.filter (fun (a, b) -> List.contains a s1 && List.contains b s2 || List.contains b s1 && List.contains a s2)
             |> List.sumBy (fun (a, b) ->
-                match StableGraphLayout.getName a, StableGraphLayout.getName b with
+                match getName a, getName b with
                 | Some a, Some b -> rg.Edges |> List.find (fun ((edgeA, _), (edgeB, _), _) -> a = edgeA && b = edgeB) |> fun (_, _, freq) -> freq
                 | _ -> 0)
 
@@ -598,7 +485,7 @@ type StableGraphLayout private () =
                 let updatedNodesOnRight =
                     goNsg.Nodes
                     |> List.indexed
-                    |> List.filter (fun (_, (pos, n)) -> pos > 0 && n |> StableGraphLayout.getRank = rank)
+                    |> List.filter (fun (_, (pos, n)) -> pos > 0 && n |> getRank = rank)
                     |> List.sortBy (fun (_, (pos, _)) -> pos)
                     |> List.mapi (fun i (idx, (_, node)) -> idx, (i + 1, node)) // Assign position based on iteration index + 1, discarding previous position
 
@@ -612,13 +499,13 @@ type StableGraphLayout private () =
 
                 // Find the index of the node to move in the existing graph so that it can later be updated
                 let newNodeIdx = graph.Nodes |> List.findIndex (fun (_, n) -> n = newNode)
-                let newNodeRank = StableGraphLayout.getRank newNode
+                let newNodeRank = getRank newNode
 
                 // Find the nodes on the same rank that already are on the left side of the backbone
                 let nodesLeftOnSameRank =
                     graph.Nodes
                     |> List.indexed
-                    |> List.filter (fun (_, (x, n)) -> x < 0 && StableGraphLayout.getRank n = StableGraphLayout.getRank newNode)
+                    |> List.filter (fun (_, (x, n)) -> x < 0 && getRank n = getRank newNode)
 
                 // If there is an existing node with a lower order index, place the new node to the left of it and shift all other nodes one to the left
                 // Otherwise, the node can be placed right next to the backbone at position -1
@@ -656,8 +543,8 @@ type StableGraphLayout private () =
         // The list of nodes that belong to the backbone
         let backbone =
             nsg.Nodes
-            |> List.groupBy StableGraphLayout.getRank
-            |> List.map (fun (_, nodes) -> nodes |> List.minBy StableGraphLayout.getDiscoveryIndex)
+            |> List.groupBy getRank
+            |> List.map (fun (_, nodes) -> nodes |> List.minBy getDiscoveryIndex)
 
         // The set of sequences belonging to the backbone
         let backboneSequences = backbone |> List.map (fun n -> n |> nodeSequence nsg)
@@ -665,7 +552,7 @@ type StableGraphLayout private () =
         // The nodes on each rank, sorted by backbone connectedness
         let nodesByRankSorted =
             nsg.Nodes
-            |> List.groupBy StableGraphLayout.getRank
+            |> List.groupBy getRank
             |> List.sortBy fst
             |> List.map (fun (rank, nodes) -> rank, nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n))
 
@@ -678,186 +565,94 @@ type StableGraphLayout private () =
         // Balance the components by moving some to the left
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
-    /// Convert a completed global order graph into a more friendly format for consumers
-    static member internal convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) : GlobalOrder =
-
-        let realFilter node = match node with | Real _ -> true | _ -> false
-
-        /// Virtual nodes are essentially waypoints for edges to navigate when drawing an edge between two nodes. Therefore, find all edges that use a sequence of waypoints and put them together.
-        let rec getVirtualComponents (graph: GlobalOrderNodeSequenceGraph) (visited: Set<SequenceNode>) (node: SequenceNode)  =
-            let visited = visited.Add node
-            let (realNodes, virtualNodes) =
-                graph.Edges
-                |> List.choose (fun ((_, a), (_, b)) -> if a = node then Some b else if b = node then Some a else None)
-                |> List.filter (fun n -> visited |> Set.contains n |> not)
-                |> List.partition realFilter
-
-            let visited = visited |> Set.union (realNodes |> Set.ofList)
-            (visited, virtualNodes) ||> List.fold (fun vis node -> (vis, node) ||> getVirtualComponents graph)
-
-        /// Get the X,Y coordinates of a sequence node in the global order graph
-        let getCoordinatesOfNode (graph: GlobalOrderNodeSequenceGraph) (node: SequenceNode) =
-            let (x, n) = graph.Nodes |> List.find (fun (_, n) -> n = node)
-            x, n |> StableGraphLayout.getRank
-
-        /// Merge multiple reachability sets together by seeing whether any virtual nodes are in multiple sets, and join those together
-        let mergeReachabilitySets (sets: Set<SequenceNode> list) =
-            (([]: Set<SequenceNode> list), sets) ||> List.fold (fun sets set ->
-                let (_, virtualNodes) = set |> Set.partition realFilter
-                let matchingSetIdx = sets |> List.tryFindIndex (fun s -> virtualNodes |> Set.exists (fun node -> s.Contains node))
-                match matchingSetIdx with
-                | Some matchingSetIdx -> (set |> Set.union sets[matchingSetIdx] , sets) ||> List.updateAt matchingSetIdx
-                | None -> set :: sets)
-
-        /// Create combinations from elements within a list (https://stackoverflow.com/a/1231711/2102106)
-        let rec combinations num list =
-            match num, list with
-            | 0, _ -> [[]]
-            | _, [] -> []
-            | num, (head :: tail) -> List.map ((@) [head]) (combinations (num - 1) tail) @ combinations num tail
-
-        let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Coordinates = x, y } | _ -> None)
-        let waypoints =
-            graph.Nodes
-            |> List.map snd
-            |> List.choose (fun n -> match n with | Virtual _ -> Some n | _ -> None)
-            |> List.map (fun n -> getVirtualComponents graph Set.empty n)
-            |> mergeReachabilitySets
-            |> List.map (fun set ->
-                let (realNodes, virtualNodes) = set |> Set.partition realFilter
-                let possibleEdges = combinations 2 (realNodes |> Set.toList)
-                possibleEdges |> List.map (fun edge ->
-                    match edge with
-                    | a :: b :: [] -> {
-                        Edge = (StableGraphLayout.getName a).Value, (StableGraphLayout.getName b).Value;
-                        Waypoints = virtualNodes |> Set.map (fun n -> n |> getCoordinatesOfNode graph) |> Set.toList }
-                    | _ -> failwith "Edge may only contain 2 nodes"))
-            |> List.concat
-
-        { Nodes = nodes; EdgeWaypoints = waypoints }
-
     /// Compute a friendly-format global order based on a global rank graph and process skeleton
-    static member internal computeGlobalOrderBasedOnRankGraphAndSkeleton (gr: GlobalRankGraph, skeleton) =
-        let nsg = (gr, skeleton) ||> StableGraphLayout.computeNodeSequenceGraph
-        (gr, nsg) ||> StableGraphLayout.computeGlobalOrder |> StableGraphLayout.convertGlobalOrderToFriendlyFormat
+    let internal computeFriendlyGlobalOrder (rankGraph: GlobalRankGraph, skeleton) =
 
-    /// <summary>
-    /// Compute a Global Ranking for all activities in an event log, merging the flattened logs of all object types together to get a total view.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// </summary>
-    static member internal computeGlobalRanking (log: OcelLog) =
-        log.ObjectTypes
-        |> List.ofSeq
-        |> List.map (fun t -> OcelHelpers.Flatten log t |> StableGraphLayout.variationsInLog (Some t))
-        |> List.concat
-        |> List.sortByDescending StableGraphLayout.importanceSort
-        |> StableGraphLayout.computeGlobalRankingAndSkeletonForVariations
+        /// Convert a completed global order graph into a more friendly format for consumers
+        let convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) =
 
-    /// <summary>
-    /// Compute a Global Ranking for all activities in an event log, flattening for a specific object type.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// </summary>
-    static member internal computeGlobalRankingForObjectType (log: OcelLog) objectType =
-        OcelHelpers.Flatten log objectType
-        |> StableGraphLayout.variationsInLog None
-        |> List.sortByDescending StableGraphLayout.importanceSort
-        |> StableGraphLayout.computeGlobalRankingAndSkeletonForVariations
+            let realFilter node = match node with | Real _ -> true | _ -> false
 
-    /// <summary>
-    /// Compute a Global Ranking for each object type in an event log.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// </summary>
-    static member internal computeGlobalRankingForEachObjectType (log: OcelLog) =
-        log.ObjectTypes |> Seq.map (fun ot -> ot, StableGraphLayout.computeGlobalRankingForObjectType log ot) |> Map.ofSeq
+            /// Virtual nodes are essentially waypoints for edges to navigate when drawing an edge between two nodes. Therefore, find all edges that use a sequence of waypoints and put them together.
+            let rec getVirtualComponents (graph: GlobalOrderNodeSequenceGraph) (visited: Set<SequenceNode>) (node: SequenceNode)  =
+                let visited = visited.Add node
+                let (realNodes, virtualNodes) =
+                    graph.Edges
+                    |> List.choose (fun ((_, a), (_, b)) -> if a = node then Some b else if b = node then Some a else None)
+                    |> List.filter (fun n -> visited |> Set.contains n |> not)
+                    |> List.partition realFilter
 
+                let visited = visited |> Set.union (realNodes |> Set.ofList)
+                (visited, virtualNodes) ||> List.fold (fun vis node -> (vis, node) ||> getVirtualComponents graph)
 
-    (* --- Public members --- *)
+            /// Get the X,Y coordinates of a sequence node in the global order graph
+            let getCoordinatesOfNode (graph: GlobalOrderNodeSequenceGraph) (node: SequenceNode) =
+                let (x, n) = graph.Nodes |> List.find (fun (_, n) -> n = node)
+                x, n |> getRank
 
-    /// <summary>
-    /// Compute a global order for an event log, flattening all object types and evaluating all traces as one.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalOrder (log: OcelLog) =
-        log |> StableGraphLayout.computeGlobalRanking |> fun (rg, sk, _) -> (rg, sk) |> StableGraphLayout.computeGlobalOrderBasedOnRankGraphAndSkeleton
+            /// Merge multiple reachability sets together by seeing whether any virtual nodes are in multiple sets, and join those together
+            let mergeReachabilitySets (sets: Set<SequenceNode> list) =
+                (([]: Set<SequenceNode> list), sets) ||> List.fold (fun sets set ->
+                    let (_, virtualNodes) = set |> Set.partition realFilter
+                    let matchingSetIdx = sets |> List.tryFindIndex (fun s -> virtualNodes |> Set.exists (fun node -> s.Contains node))
+                    match matchingSetIdx with
+                    | Some matchingSetIdx -> (set |> Set.union sets[matchingSetIdx] , sets) ||> List.updateAt matchingSetIdx
+                    | None -> set :: sets)
 
-    /// <summary>
-    /// Compute a global order, flattening for a specific object type.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalOrderForObjectType(log: OcelLog, objType) =
-        (log, objType) ||> StableGraphLayout.computeGlobalRankingForObjectType |> fun (rg, sk, _) -> (rg, sk) |> StableGraphLayout.computeGlobalOrderBasedOnRankGraphAndSkeleton
+            /// Create combinations from elements within a list (https://stackoverflow.com/a/1231711/2102106)
+            let rec combinations num list =
+                match num, list with
+                | 0, _ -> [[]]
+                | _, [] -> []
+                | num, (head :: tail) -> List.map ((@) [head]) (combinations (num - 1) tail) @ combinations num tail
 
-    /// <summary>
-    /// Compute a global order for each object type in an event log.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalOrderForEachObjectType (log: OcelLog) =
-        log |> StableGraphLayout.computeGlobalRankingForEachObjectType |> Map.map (fun _ (gr, sk, _) -> StableGraphLayout.computeGlobalOrderBasedOnRankGraphAndSkeleton (gr, sk))
+            let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Coordinates = x, y } | _ -> None)
+            let edgePaths =
+                graph.Nodes
+                |> List.map snd
+                |> List.choose (fun n -> match n with | Virtual _ -> Some n | _ -> None)
+                |> List.map (fun n -> getVirtualComponents graph Set.empty n)
+                |> mergeReachabilitySets
+                |> List.map (fun set ->
+                    let (realNodes, virtualNodes) = set |> Set.partition realFilter
+                    let possibleEdges = combinations 2 (realNodes |> Set.toList)
+                    possibleEdges |> List.map (fun edge ->
+                        match edge with
+                        | a :: b :: [] -> {
+                            Edge = (getName a).Value, (getName b).Value;
+                            Waypoints = virtualNodes |> Set.map (fun n -> n |> getCoordinatesOfNode graph) |> Set.toList }
+                        | _ -> failwith "Edge may only contain 2 nodes"))
+                |> List.concat
 
+            { Nodes = nodes; EdgePaths = edgePaths }
 
-    (* --- Overloads for C# OCEL log type --- *)
+        let nsg = (rankGraph, skeleton) ||> computeNodeSequenceGraph
+        (rankGraph, nsg) ||> computeGlobalOrder |> convertGlobalOrderToFriendlyFormat
 
-    /// <summary>
-    /// Compute a global order for an event log, flattening all object types and evaluating all traces as one.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalOrder (log: OCEL.CSharp.OcelLog) =
-        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> StableGraphLayout.ComputeGlobalOrder
+    /// Check the edges of a discovered model, and fix any horizontal edges that might be present due to filtering (Algorithm 6 from Mennens 2018)
+    let internal fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel (rankGraph: GlobalRankGraph) components model =
 
-    /// <summary>
-    /// Compute a global order, flattening for a specific object type.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalOrderForObjectType(log: OCEL.CSharp.OcelLog, objType) =
-         StableGraphLayout.ComputeGlobalOrderForObjectType(log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog, objType)
+        /// Get the name of the DFG node as it would have been added to the global rank graph
+        let getNodeName node =
+            match node with
+            | EventNode node -> node.Name
+            | StartNode objType -> $"{Constants.objectTypeStartNode} {objType}"
+            | EndNode objType -> $"{Constants.objectTypeEndNode} {objType}"
 
-    /// <summary>
-    /// Compute a global order for each object type in an event log.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalOrderForEachObjectType (log: OCEL.CSharp.OcelLog) =
-        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> StableGraphLayout.ComputeGlobalOrderForEachObjectType |> Map.toSeq |> dict
+        let horizontalEdgesByRank =
+            model.Edges
+            |> List.map (fun (a, b, e) ->
+                let nodeA = rankGraph.Nodes |> List.find (fun (n, _) -> n = getNodeName a)
+                let nodeB = rankGraph.Nodes |> List.find (fun (n, _) -> n = getNodeName b) 
+                (a, b, e), (nodeA, nodeB))
+            |> List.filter (fun (_, (nodeA, nodeB)) -> (nodeA = nodeB) |> not && snd nodeA = snd nodeB)
+            |> List.groupBy (fun (_, (a, _)) -> snd a) // Group by rank
+            |> List.map (fun (_, v) -> v)
 
-
-    (* --- Overloads for providing methods with discovered model, in order to fix horizontal edges --- *)
-
-    /// <summary>
-    /// Compute a global order for an event log, flattening all object types and evaluating all traces as one.
-    /// An already discovered model can be passed in to fix any horizontal edges that may have been created due to filtering.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalOrder (log: OcelLog, discoveredModel: DirectedGraph<Dfg.Node, Dfg.Edge>) =
-        let gr, skeleton, comps = log |> StableGraphLayout.computeGlobalRanking
-        let (gr, _) = StableGraphLayout.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel gr comps discoveredModel
-        (gr, skeleton) |> StableGraphLayout.computeGlobalOrderBasedOnRankGraphAndSkeleton
-
-
-    /// <summary>
-    /// Compute a global order, flattening for a specific object type.
-    /// An already discovered model can be passed in to fix any horizontal edges that may have been created due to filtering.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="https://doi.org/10.1111/cgf.13723">Mennens, R.J.P., Scheepens, R. and Westenberg, M.A. (2019), A stable graph layout algorithm for processes. Computer Graphics Forum, 38: 725-737</see>
-    /// and <see href="https://robinmennens.github.io/Portfolio/stablegraphlayouts.html">Graph layout stability in process mining</see>
-    /// </summary>
-    static member ComputeGlobalOrderForObjectType(log: OcelLog, objType, discoveredModel: DirectedGraph<Dfg.Node, Dfg.Edge>) =
-        let gr, skeleton, comps = StableGraphLayout.computeGlobalRankingForObjectType log objType
-        let (gr, _) = StableGraphLayout.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel gr comps discoveredModel
-        (gr, skeleton) |> StableGraphLayout.computeGlobalOrderBasedOnRankGraphAndSkeleton
-
-
-
-    // TODO: Also create C# versions of this, and maybe also move it to a different file to not bloat the actual logic...
+        // For each horizontal edge found, insert the single-edge sequence into the global rank graph to fix it
+        ((rankGraph, components), horizontalEdgesByRank) ||> List.fold (fun (graph, components) horizontalEdges ->
+            let edgesSortedbyFrequency = horizontalEdges |> List.sortByDescending (fun ((_, _, e), _) -> e.Statistics.Frequency)
+            ((graph, components), edgesSortedbyFrequency) ||> List.fold (fun (graph, components) ((a, b, edge), _) ->
+                let seq = [Edge(getNodeName a, getNodeName b), edge.Statistics.Frequency]
+                seq |> insertSequence graph components))
+        |> fun (rg, comp) -> rg |> normalizeRanks, comp
