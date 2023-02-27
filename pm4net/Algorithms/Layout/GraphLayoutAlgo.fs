@@ -4,7 +4,7 @@ open pm4net.Types
 open pm4net.Types.Graphs
 open pm4net.Types.GraphLayout
 
-/// Stable graph layout algorithm introduced by Mennens 2019 (https://doi.org/10.1111/cgf.13723), implemented in Johannes Mols.
+/// An implementation of the "stable graph layout algorithm for processes" introduced by Mennens 2019 (https://doi.org/10.1111/cgf.13723), implemented by Johannes Mols.
 module internal GraphLayoutAlgo =
 
     /// Update a node's rank in a rank graph, changing the edges that reference the nodes with it
@@ -607,7 +607,7 @@ module internal GraphLayoutAlgo =
                 | num, (head :: tail) -> List.map ((@) [head]) (combinations (num - 1) tail) @ combinations num tail
 
             let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Coordinates = x, y } | _ -> None)
-            let waypoints =
+            let edgePaths =
                 graph.Nodes
                 |> List.map snd
                 |> List.choose (fun n -> match n with | Virtual _ -> Some n | _ -> None)
@@ -624,7 +624,7 @@ module internal GraphLayoutAlgo =
                         | _ -> failwith "Edge may only contain 2 nodes"))
                 |> List.concat
 
-            { Nodes = nodes; EdgePaths = waypoints }
+            { Nodes = nodes; EdgePaths = edgePaths }
 
         let nsg = (rankGraph, skeleton) ||> computeNodeSequenceGraph
         (rankGraph, nsg) ||> computeGlobalOrder |> convertGlobalOrderToFriendlyFormat
