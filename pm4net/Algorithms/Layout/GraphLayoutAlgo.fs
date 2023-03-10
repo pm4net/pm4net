@@ -294,6 +294,34 @@ module internal GraphLayoutAlgo =
         // Normalize the rank graph and order nodes and edges correctly, and return it together with the skeleton
         rankGraph |> normalizeRanks |> reverseNodeAndEdgeOrder, skeleton, components
 
+    /// Check the edges of a discovered model, and fix any horizontal edges that might be present due to filtering (Algorithm 6 from Mennens 2018)
+    let internal fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel (rankGraph: GlobalRankGraph) components model =
+
+        /// Get the name of the DFG node as it would have been added to the global rank graph
+        let getNodeName node =
+            match node with
+            | EventNode node -> node.Name
+            | StartNode objType -> Constants.objectTypeStartNode + objType
+            | EndNode objType -> Constants.objectTypeEndNode + objType
+
+        let horizontalEdgesByRank =
+            model.Edges
+            |> List.map (fun (a, b, e) ->
+                let nodeA = rankGraph.Nodes |> List.find (fun (n, _) -> n = getNodeName a)
+                let nodeB = rankGraph.Nodes |> List.find (fun (n, _) -> n = getNodeName b) 
+                (a, b, e), (nodeA, nodeB))
+            |> List.filter (fun (_, (nodeA, nodeB)) -> (nodeA = nodeB) |> not && snd nodeA = snd nodeB)
+            |> List.groupBy (fun (_, (a, _)) -> snd a) // Group by rank
+            |> List.map (fun (_, v) -> v)
+
+        // For each horizontal edge found, insert the single-edge sequence into the global rank graph to fix it
+        ((rankGraph, components), horizontalEdgesByRank) ||> List.fold (fun (graph, components) horizontalEdges ->
+            let edgesSortedbyFrequency = horizontalEdges |> List.sortByDescending (fun ((_, _, e), _) -> e.Statistics.Frequency)
+            ((graph, components), edgesSortedbyFrequency) ||> List.fold (fun (graph, components) ((a, b, edge), _) ->
+                let seq = [Edge(getNodeName a, getNodeName b), edge.Statistics.Frequency]
+                seq |> insertSequence graph components))
+        |> fun (rg, comp) -> rg |> normalizeRanks, comp
+
     /// Compute a node sequence graph given a global rank graph and the process skeleton
     let internal computeNodeSequenceGraph rankGraph skeleton =
 
@@ -565,96 +593,66 @@ module internal GraphLayoutAlgo =
         // Balance the components by moving some to the left
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
-    /// Compute a friendly-format global order based on a global rank graph and process skeleton
-    let internal computeFriendlyGlobalOrder (rankGraph: GlobalRankGraph, skeleton) =
+    /// Minimize edge crossings for a discovered model
+    let internal minimizeEdgeCrossings (goNsg: GlobalOrderNodeSequenceGraph) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
+        goNsg
 
-        /// Convert a completed global order graph into a more friendly format for consumers
-        let convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) =
+    /// Convert a completed global order graph into a more friendly format for consumers
+    let internal convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) =
 
-            let realFilter node = match node with | Real _ -> true | _ -> false
+        let realFilter node = match node with | Real _ -> true | _ -> false
 
-            /// Virtual nodes are essentially waypoints for edges to navigate when drawing an edge between two nodes. Therefore, find all edges that use a sequence of waypoints and put them together.
-            let rec getVirtualComponents (graph: GlobalOrderNodeSequenceGraph) (visited: Set<SequenceNode>) (node: SequenceNode)  =
-                let visited = visited.Add node
-                let (realNodes, virtualNodes) =
-                    graph.Edges
-                    |> List.choose (fun ((_, a), (_, b)) -> if a = node then Some b else if b = node then Some a else None)
-                    |> List.filter (fun n -> visited |> Set.contains n |> not)
-                    |> List.partition realFilter
+        /// Virtual nodes are essentially waypoints for edges to navigate when drawing an edge between two nodes. Therefore, find all edges that use a sequence of waypoints and put them together.
+        let rec getVirtualComponents (graph: GlobalOrderNodeSequenceGraph) (visited: Set<SequenceNode>) (node: SequenceNode)  =
+            let visited = visited.Add node
+            let (realNodes, virtualNodes) =
+                graph.Edges
+                |> List.choose (fun ((_, a), (_, b)) -> if a = node then Some b else if b = node then Some a else None)
+                |> List.filter (fun n -> visited |> Set.contains n |> not)
+                |> List.partition realFilter
 
-                let visited = visited |> Set.union (realNodes |> Set.ofList)
-                (visited, virtualNodes) ||> List.fold (fun vis node -> (vis, node) ||> getVirtualComponents graph)
+            let visited = visited |> Set.union (realNodes |> Set.ofList)
+            (visited, virtualNodes) ||> List.fold (fun vis node -> (vis, node) ||> getVirtualComponents graph)
 
-            /// Get the X,Y coordinates of a sequence node in the global order graph
-            let getCoordinatesOfNode (graph: GlobalOrderNodeSequenceGraph) (node: SequenceNode) =
-                let (x, n) = graph.Nodes |> List.find (fun (_, n) -> n = node)
-                { X = x; Y = n |> getRank }
+        /// Get the X,Y coordinates of a sequence node in the global order graph
+        let getCoordinatesOfNode (graph: GlobalOrderNodeSequenceGraph) (node: SequenceNode) =
+            let (x, n) = graph.Nodes |> List.find (fun (_, n) -> n = node)
+            { X = x; Y = n |> getRank }
 
-            /// Merge multiple reachability sets together by seeing whether any virtual nodes are in multiple sets, and join those together
-            let mergeReachabilitySets (sets: Set<SequenceNode> list) =
-                (([]: Set<SequenceNode> list), sets) ||> List.fold (fun sets set ->
-                    let (_, virtualNodes) = set |> Set.partition realFilter
-                    let matchingSetIdx = sets |> List.tryFindIndex (fun s -> virtualNodes |> Set.exists (fun node -> s.Contains node))
-                    match matchingSetIdx with
-                    | Some matchingSetIdx -> (set |> Set.union sets[matchingSetIdx] , sets) ||> List.updateAt matchingSetIdx
-                    | None -> set :: sets)
+        /// Merge multiple reachability sets together by seeing whether any virtual nodes are in multiple sets, and join those together
+        let mergeReachabilitySets (sets: Set<SequenceNode> list) =
+            (([]: Set<SequenceNode> list), sets) ||> List.fold (fun sets set ->
+                let (_, virtualNodes) = set |> Set.partition realFilter
+                let matchingSetIdx = sets |> List.tryFindIndex (fun s -> virtualNodes |> Set.exists (fun node -> s.Contains node))
+                match matchingSetIdx with
+                | Some matchingSetIdx -> (set |> Set.union sets[matchingSetIdx] , sets) ||> List.updateAt matchingSetIdx
+                | None -> set :: sets)
 
-            /// Create combinations from elements within a list (https://stackoverflow.com/a/1231711/2102106)
-            let rec combinations num list =
-                match num, list with
-                | 0, _ -> [[]]
-                | _, [] -> []
-                | num, (head :: tail) -> List.map ((@) [head]) (combinations (num - 1) tail) @ combinations num tail
+        /// Create combinations from elements within a list (https://stackoverflow.com/a/1231711/2102106)
+        let rec combinations num list =
+            match num, list with
+            | 0, _ -> [[]]
+            | _, [] -> []
+            | num, (head :: tail) -> List.map ((@) [head]) (combinations (num - 1) tail) @ combinations num tail
 
-            let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Position = { X = x; Y = y } } | _ -> None)
-            let edgePaths =
-                graph.Nodes
-                |> List.map snd
-                |> List.choose (fun n -> match n with | Virtual _ -> Some n | _ -> None)
-                |> List.map (fun n -> getVirtualComponents graph Set.empty n)
-                |> mergeReachabilitySets
-                |> List.map (fun set ->
-                    let (realNodes, virtualNodes) = set |> Set.partition realFilter
-                    let possibleEdges = combinations 2 (realNodes |> Set.toList)
-                    possibleEdges |> List.map (fun edge ->
-                        match edge with
-                        | a :: b :: [] ->
-                            {
-                                Edge = (getName a).Value, (getName b).Value;
-                                Waypoints = virtualNodes |> Set.map (fun n -> n |> getCoordinatesOfNode graph) |> Set.toList
-                            }
-                        | _ -> failwith "Edge may only contain 2 nodes"))
-                |> List.concat
+        let nodes = graph.Nodes |> List.choose (fun (x, n) -> match n with | Real(y, _, name) -> Some { Name = name; Position = { X = x; Y = y } } | _ -> None)
+        let edgePaths =
+            graph.Nodes
+            |> List.map snd
+            |> List.choose (fun n -> match n with | Virtual _ -> Some n | _ -> None)
+            |> List.map (fun n -> getVirtualComponents graph Set.empty n)
+            |> mergeReachabilitySets
+            |> List.map (fun set ->
+                let (realNodes, virtualNodes) = set |> Set.partition realFilter
+                let possibleEdges = combinations 2 (realNodes |> Set.toList)
+                possibleEdges |> List.map (fun edge ->
+                    match edge with
+                    | a :: b :: [] ->
+                        {
+                            Edge = (getName a).Value, (getName b).Value;
+                            Waypoints = virtualNodes |> Set.map (fun n -> n |> getCoordinatesOfNode graph) |> Set.toList
+                        }
+                    | _ -> failwith "Edge may only contain 2 nodes"))
+            |> List.concat
 
-            { Nodes = nodes; EdgePaths = edgePaths }
-
-        let nsg = (rankGraph, skeleton) ||> computeNodeSequenceGraph
-        (rankGraph, nsg) ||> computeGlobalOrder |> convertGlobalOrderToFriendlyFormat
-
-    /// Check the edges of a discovered model, and fix any horizontal edges that might be present due to filtering (Algorithm 6 from Mennens 2018)
-    let internal fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel (rankGraph: GlobalRankGraph) components model =
-
-        /// Get the name of the DFG node as it would have been added to the global rank graph
-        let getNodeName node =
-            match node with
-            | EventNode node -> node.Name
-            | StartNode objType -> Constants.objectTypeStartNode + objType
-            | EndNode objType -> Constants.objectTypeEndNode + objType
-
-        let horizontalEdgesByRank =
-            model.Edges
-            |> List.map (fun (a, b, e) ->
-                let nodeA = rankGraph.Nodes |> List.find (fun (n, _) -> n = getNodeName a)
-                let nodeB = rankGraph.Nodes |> List.find (fun (n, _) -> n = getNodeName b) 
-                (a, b, e), (nodeA, nodeB))
-            |> List.filter (fun (_, (nodeA, nodeB)) -> (nodeA = nodeB) |> not && snd nodeA = snd nodeB)
-            |> List.groupBy (fun (_, (a, _)) -> snd a) // Group by rank
-            |> List.map (fun (_, v) -> v)
-
-        // For each horizontal edge found, insert the single-edge sequence into the global rank graph to fix it
-        ((rankGraph, components), horizontalEdgesByRank) ||> List.fold (fun (graph, components) horizontalEdges ->
-            let edgesSortedbyFrequency = horizontalEdges |> List.sortByDescending (fun ((_, _, e), _) -> e.Statistics.Frequency)
-            ((graph, components), edgesSortedbyFrequency) ||> List.fold (fun (graph, components) ((a, b, edge), _) ->
-                let seq = [Edge(getNodeName a, getNodeName b), edge.Statistics.Frequency]
-                seq |> insertSequence graph components))
-        |> fun (rg, comp) -> rg |> normalizeRanks, comp
+        { Nodes = nodes; EdgePaths = edgePaths }

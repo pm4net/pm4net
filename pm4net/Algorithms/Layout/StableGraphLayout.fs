@@ -16,6 +16,9 @@ do()
 [<AbstractClass; Sealed>]
 type StableGraphLayout private() =
 
+    static member private toCSharpFriendly (rg: GlobalRankGraph, sk: Skeleton, comp: Components) =
+        rg, sk |> List.map Seq.ofList |> seq, comp |> List.map Set.toSeq |> seq
+
     /// Extract the unique variations in the flattened log and order them by importance, with an optional object type that is added as a start and end to all variations
     static member private variationsInLog objType log =
 
@@ -55,8 +58,14 @@ type StableGraphLayout private() =
         |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
         |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> simpleSequence })
 
-    /// Compute a Global Ranking for all activities in an event log, merging the flattened logs of all object types together to get a total view.
-    static member internal computeGlobalRanking (log: OcelLog) =
+    /// Compute a global ranking based on a rank graph and skeleton
+    static member private computeGlobalRanking rankGraph skeleton =
+        let nodeSequenceGraph = (rankGraph, skeleton) ||> GraphLayoutAlgo.computeNodeSequenceGraph
+        (rankGraph, nodeSequenceGraph) ||> GraphLayoutAlgo.computeGlobalOrder
+
+
+    /// Compute the global rank graph (RG) from an event log, merging the flattened logs of all object types together to get a total view.
+    static member ComputeRankGraph (log: OcelLog) : GlobalRankGraph * Skeleton * Components  =
         log.ObjectTypes
         |> Set.toList
         |> List.map (fun t -> OcelHelpers.Flatten log t |> StableGraphLayout.variationsInLog (Some t))
@@ -64,85 +73,51 @@ type StableGraphLayout private() =
         |> List.sortByDescending GraphLayoutAlgo.importanceSort
         |> GraphLayoutAlgo.computeGlobalRankingAndSkeletonForVariations
 
-    /// Compute a Global Ranking for all activities in an event log, flattening for a specific object type.
-    static member internal computeGlobalRankingForObjectType (log: OcelLog) objectType =
+    /// Compute the global rank graph (RG) from an event log, merging the flattened logs of all object types together to get a total view.
+    static member ComputeRankGraph (log: OCEL.CSharp.OcelLog) =
+        log
+        |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog
+        |> StableGraphLayout.ComputeRankGraph
+        |> StableGraphLayout.toCSharpFriendly
+
+
+    /// Compute the global rank graph (RG) from an event log, flattening for a specific object type.
+    static member ComputeRankGraphForObjectType (log: OcelLog, objectType) : GlobalRankGraph * Skeleton * Components =
         OcelHelpers.Flatten log objectType
         |> StableGraphLayout.variationsInLog None
         |> List.sortByDescending GraphLayoutAlgo.importanceSort
         |> GraphLayoutAlgo.computeGlobalRankingAndSkeletonForVariations
 
-    /// Compute a Global Ranking for each object type in an event log.
-    static member internal computeGlobalRankingForEachObjectType (log: OcelLog) =
-        log.ObjectTypes |> Seq.map (fun ot -> ot, StableGraphLayout.computeGlobalRankingForObjectType log ot) |> Map.ofSeq
+    /// Compute the global rank graph (RG) from an event log, flattening for a specific object type.
+    static member ComputeRankGraphForObjectType (log: OCEL.CSharp.OcelLog, objectType) =
+        (log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog, objectType)
+        |> StableGraphLayout.ComputeRankGraphForObjectType
+        |> StableGraphLayout.toCSharpFriendly
 
+
+    /// Compute the global rank graph (RG) from an event log for each object type available in the log.
+    static member ComputeRankGraphForEachObjectType (log: OcelLog) : Map<string, GlobalRankGraph * Skeleton * Components> =
+        log.ObjectTypes
+        |> Seq.map (fun ot -> ot, (log, ot) |> StableGraphLayout.ComputeRankGraphForObjectType)
+        |> Map.ofSeq
+
+    /// Compute the global rank graph (RG) from an event log for each object type available in the log.
+    static member ComputeRankGraphForEachObjectType (log: OCEL.CSharp.OcelLog) =
+        log
+        |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog
+        |> StableGraphLayout.ComputeRankGraphForEachObjectType
+        |> Map.map (fun _ v -> v |> StableGraphLayout.toCSharpFriendly)
+        |> Map.toSeq
+        |> dict
 
     (* --- GLOBAL ORDER FOR ALL OBJECT TYPES --- *)
 
-    /// Compute a global order for an event log, flattening all object types and evaluating all traces as one.
-    /// The start and end nodes of each object type are added as regular nodes and are part of the global order.
-    static member ComputeGlobalOrder (log: OcelLog) =
-        log |> StableGraphLayout.computeGlobalRanking |> fun (rg, sk, _) -> (rg, sk) |> GraphLayoutAlgo.computeFriendlyGlobalOrder
+    /// Compute a global order for a global rank graph by the means of a discovered model that is a subgraph of the global rank graph.
+    static member ComputeGlobalOrder (rankGraph, skeleton, components, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
+        let (rankGraph, _) = (rankGraph, components, discoveredModel) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
+        let globalOrder = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
+        (globalOrder, discoveredModel) ||> GraphLayoutAlgo.minimizeEdgeCrossings |> GraphLayoutAlgo.convertGlobalOrderToFriendlyFormat
 
-    /// Compute a global order for an event log, flattening all object types and evaluating all traces as one.
-    /// The start and end nodes of each object type are added as regular nodes and are part of the global order.
-    static member ComputeGlobalOrder (log: OCEL.CSharp.OcelLog) =
-        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> StableGraphLayout.ComputeGlobalOrder
-
-    /// Compute a global order for an event log, flattening all object types and evaluating all traces as one.
-    /// An already discovered model can be passed in to fix any horizontal edges that may have been created due to filtering.
-    static member ComputeGlobalOrder (log: OcelLog, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
-        let gr, skeleton, comps = log |> StableGraphLayout.computeGlobalRanking
-        let (gr, _) = GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel gr comps discoveredModel
-        (gr, skeleton) |> GraphLayoutAlgo.computeFriendlyGlobalOrder
-
-    /// Compute a global order for an event log, flattening all object types and evaluating all traces as one.
-    /// An already discovered model can be passed in to fix any horizontal edges that may have been created due to filtering.
-    static member ComputeGlobalOrder (log: OCEL.CSharp.OcelLog, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
-         (log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog, discoveredModel) |> StableGraphLayout.ComputeGlobalOrder
-
-
-    (* --- GLOBAL ORDER FOR SPECIFIC OBJECT TYPE --- *)
-
-    /// Compute a global order, flattening for a specific object type.
-    static member ComputeGlobalOrderForObjectType(log: OcelLog, objType) =
-        (log, objType) ||> StableGraphLayout.computeGlobalRankingForObjectType |> fun (rg, sk, _) -> (rg, sk) |> GraphLayoutAlgo.computeFriendlyGlobalOrder
-
-    /// Compute a global order, flattening for a specific object type.
-    static member ComputeGlobalOrderForObjectType(log: OCEL.CSharp.OcelLog, objType) =
-         StableGraphLayout.ComputeGlobalOrderForObjectType(log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog, objType)
-
-    /// Compute a global order, flattening for a specific object type.
-    /// An already discovered model can be passed in to fix any horizontal edges that may have been created due to filtering.
-    static member ComputeGlobalOrderForObjectType(log: OcelLog, objType, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
-        let gr, skeleton, comps = StableGraphLayout.computeGlobalRankingForObjectType log objType
-        let (gr, _) = GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel gr comps discoveredModel
-        (gr, skeleton) |> GraphLayoutAlgo.computeFriendlyGlobalOrder
-
-    /// Compute a global order, flattening for a specific object type.
-    /// An already discovered model can be passed in to fix any horizontal edges that may have been created due to filtering.
-    static member ComputeGlobalOrderForObjectType(log: OCEL.CSharp.OcelLog, objType, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
-        (log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog, objType, discoveredModel) |> StableGraphLayout.ComputeGlobalOrderForObjectType
-
-
-    (* --- GLOBAL ORDER FOR EACH OBJECT TYPE INDIVIDUALLY --- *)
-
-    /// Compute a global order for each object type in an event log.
-    static member ComputeGlobalOrderForEachObjectType (log: OcelLog) =
-        log |> StableGraphLayout.computeGlobalRankingForEachObjectType |> Map.map (fun _ (gr, sk, _) -> GraphLayoutAlgo.computeFriendlyGlobalOrder (gr, sk))
-
-    /// Compute a global order for each object type in an event log.
-    static member ComputeGlobalOrderForEachObjectType (log: OCEL.CSharp.OcelLog) =
-        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> StableGraphLayout.ComputeGlobalOrderForEachObjectType |> Map.toSeq |> dict
-
-    /// Compute a global order for each object type in an event log.
-    /// An already discovered model can be passed in to fix any horizontal edges that may have been created due to filtering.
-    static member ComputeGlobalOrderForEachObjectType (log: OcelLog, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
-        log.ObjectTypes
-        |> Set.toList
-        |> List.map (fun t -> t, StableGraphLayout.ComputeGlobalOrderForObjectType(log, t, discoveredModel))
-        |> Map.ofList
-
-    /// Compute a global order for each object type in an event log.
-    /// An already discovered model can be passed in to fix any horizontal edges that may have been created due to filtering.
-    static member ComputeGlobalOrderForEachObjectType (log: OCEL.CSharp.OcelLog, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
-        (log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog, discoveredModel) |> StableGraphLayout.ComputeGlobalOrderForEachObjectType
+    /// Compute a global order for a global rank graph by the means of a discovered model that is a subgraph of the global rank graph.
+    static member ComputeGlobalOrder (rankGraph: GlobalRankGraph, skeleton: (SequenceElement<string> * int) seq seq, components: string seq seq, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
+        StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton |> Seq.map List.ofSeq |> List.ofSeq, components |> Seq.map Set.ofSeq |> List.ofSeq, discoveredModel)
