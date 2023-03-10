@@ -618,9 +618,13 @@ module internal GraphLayoutAlgo =
                     let possibleEdges = combinations 2 (realNodes |> Set.toList)
                     possibleEdges |> List.map (fun edge ->
                         match edge with
-                        | a :: b :: [] -> {
-                            Edge = (getName a).Value, (getName b).Value;
-                            Waypoints = virtualNodes |> Set.map (fun n -> n |> getCoordinatesOfNode graph) |> Set.toList }
+                        | a :: b :: [] ->
+                            let downwardEdge = (getCoordinatesOfNode graph a).Y > (getCoordinatesOfNode graph b).Y
+                            let waypoints = virtualNodes |> Set.map (fun n -> n |> getCoordinatesOfNode graph) |> Set.toList
+                            {
+                                Edge = (getName a).Value, (getName b).Value;
+                                Waypoints = if downwardEdge then waypoints |> List.sortBy (fun w -> w.Y) else waypoints |> List.sortByDescending (fun w -> w.Y)
+                            }
                         | _ -> failwith "Edge may only contain 2 nodes"))
                 |> List.concat
 
