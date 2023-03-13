@@ -594,8 +594,32 @@ module internal GraphLayoutAlgo =
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
     /// Minimize edge crossings for a discovered model
-    let internal minimizeEdgeCrossings (goNsg: GlobalOrderNodeSequenceGraph) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
-        goNsg
+    let internal minimizeEdgeCrossings (goNsg: GlobalOrderNodeSequenceGraph) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * SequenceNode> =
+
+        // Go through all the nodes in the model, find them in the global order NSG and assign initial x positions in the interval [-1,1]
+        let initialOrder (goNsg: GlobalOrderNodeSequenceGraph) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * SequenceNode> =
+
+            /// Calculate the X position for nodes in the range of [-1, 1], based on their X position and how many there are on this side of the backbone
+            let calculateXPos nodes =
+                nodes
+                |> List.sortBy fst
+                |> List.map (fun (x, n) -> (float32(x) / float32(nodes.Length + 1), n))
+
+            let nodesByRank = goNsg.Nodes |> List.groupBy (fun (_, n) -> getRank n)
+            (({ Nodes = []; Edges = [] }: DirectedGraph<float32 * SequenceNode>), nodesByRank) ||> List.fold (fun state value ->
+                 match value |> snd with
+                 | [_, n] -> { state with Nodes = (0f, n) :: state.Nodes }
+                 | nodes ->
+                    let backboneNodeIdx = nodes |> List.tryFindIndex (fun (x, _) -> x = 0) // Check whether there is a backbone node on this rank
+                    let s = match backboneNodeIdx with | Some idx -> { state with Nodes = (0f, nodes[idx] |> snd) :: state.Nodes } | _ -> state // Add backbone node with value 0
+                    let nodes = match backboneNodeIdx with | Some idx -> nodes |> List.removeAt idx | _ -> nodes // Remove backbone node from list if exists
+                    let (left, right) = nodes |> List.partition (fun (xPos, _) -> xPos < 0) // Partition nodes into left or right of backbone
+                    let s = { s with Nodes = s.Nodes |> List.append (calculateXPos left) }
+                    let s = { s with Nodes = s.Nodes |> List.append (calculateXPos right) }
+                    s
+            )
+
+        initialOrder goNsg model
 
     /// Convert a completed global order graph into a more friendly format for consumers
     let internal convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) =

@@ -56,9 +56,10 @@ module ``Stable graph layout tests`` =
         rankGraph |> Assert.NotNull
 
     [<Fact>]
-    let ``Can discover global order from 'GitHub pm4py' log and discovered DFG`` () =
+    let ``Can discover global order from Blazor log and discovered DFG`` () =
         let json = File.ReadAllText("blazor-logs.jsonocel")
         let log = OcelJson.deserialize true json
+        let log = log.MergeDuplicateObjects()
         let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["CorrelationId"], log)
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
