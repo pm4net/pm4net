@@ -25,6 +25,12 @@ type SequenceNode =
 type NodeSequenceGraph = DirectedGraph<SequenceNode>
 type GlobalOrderNodeSequenceGraph = DirectedGraph<int * SequenceNode> // Integer indicates the X position of the node
 
+/// Types for the crossing minimisation when non-sequence edges are also added to the NSG, but in an unconstrained fashion
+type CrossMinNode =
+    | Sequence of X: int * Node: SequenceNode
+    | NonSequence of Rank: int * A: string * B: string
+type CrossMinNsg = DirectedGraph<CrossMinNode, bool> // Boolean on edges indicate whether edge is constrained or unconstrained
+
 /// Type to represent a variation of a trace, with all its events, a sequence of nodes and edges, and the frequency of the variation
 type internal Variation<'a, 'b> = {
     Events: 'a list

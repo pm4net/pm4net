@@ -209,6 +209,13 @@ module internal GraphLayoutAlgo =
         | Real(_, _, name) -> Some name
         | _ -> None
 
+    /// Get the name of the DFG node as it would have been added to the global rank graph
+    let private getNodeName node =
+        match node with
+        | EventNode node -> node.Name
+        | StartNode objType -> Constants.objectTypeStartNode + objType
+        | EndNode objType -> Constants.objectTypeEndNode + objType
+
     /// Sort traces based on their importance (sum of w^2 * |v|^2)
     let internal importanceSort variation =
         let wSquaredSum = variation.Sequence |> List.sumBy (fun s -> match s with | Node _, _ -> 0L | Edge _, freq -> pown (freq |> int64) 2)
@@ -296,13 +303,6 @@ module internal GraphLayoutAlgo =
 
     /// Check the edges of a discovered model, and fix any horizontal edges that might be present due to filtering (Algorithm 6 from Mennens 2018)
     let internal fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel (rankGraph: GlobalRankGraph) components model =
-
-        /// Get the name of the DFG node as it would have been added to the global rank graph
-        let getNodeName node =
-            match node with
-            | EventNode node -> node.Name
-            | StartNode objType -> Constants.objectTypeStartNode + objType
-            | EndNode objType -> Constants.objectTypeEndNode + objType
 
         let horizontalEdgesByRank =
             model.Edges
@@ -594,32 +594,117 @@ module internal GraphLayoutAlgo =
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
     /// Minimize edge crossings for a discovered model
-    let internal minimizeEdgeCrossings (goNsg: GlobalOrderNodeSequenceGraph) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * SequenceNode> =
+    let internal minimizeEdgeCrossings (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * CrossMinNode> =
+
+        /// Convert a global order NSG to a temporary NSG for crossing minimisation, adding non-sequence nodes and edges from the discovered model
+        let insertNonSequenceNodesAndEdges (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) model : CrossMinNsg =
+
+            /// Add existing nodes and edges from the global order node sequence graph to the modified datatype which may contain non-sequence nodes and edges
+            let addFromGoNsg (goNsg: GlobalOrderNodeSequenceGraph) : CrossMinNsg =
+                { Nodes = goNsg.Nodes |> List.map (fun (x, n) -> Sequence(x, n)); Edges = goNsg.Edges |> List.map (fun ((ax, an), (bx, bn)) -> (Sequence(ax, an), Sequence(bx, bn), true)) }
+
+            /// Add non-sequence edges to cross-min node sequence graph
+            let addEdges (edges: (Graphs.Node * Graphs.Node * Graphs.Edge) list) (goNsg: CrossMinNsg) =
+
+                /// Find a real sequence node in the CrossMinNsg with a given name, and return the node and its rank
+                let findRealSequenceNode (goNsg: CrossMinNsg) nodeName =
+                    goNsg.Nodes |> List.pick (fun n ->
+                        match n with
+                        | Sequence(_, seqN) ->
+                            match seqN with
+                            | Real(rank, _, name) -> if name = nodeName then Some(n, rank, name) else None
+                            | _ -> None
+                        | _ -> None)
+
+                /// Recursively add a number of non-sequence virtual nodes in between two ranks
+                let rec addVirtualNodesBetweenRanks (goNsg: CrossMinNsg) (nodeA, rankA, nameA) (nodeB, rankB, nameB) =
+                    let upwards = rankA - rankB >= 0 // Whether the direction is upwards or downwards
+                    let nextRank = rankA + if upwards then -1 else 1 // The next rank to consider in the given direction
+                    match nextRank = rankB with
+                    | false ->
+                        let virtualNode = NonSequence(nextRank, nameA, nameB)
+                        let goNsg = { goNsg with Nodes = virtualNode :: goNsg.Nodes; Edges = (nodeA, virtualNode, false) :: goNsg.Edges }
+                        addVirtualNodesBetweenRanks goNsg (virtualNode, nextRank, nameA) (nodeB, rankB, nameB)
+                    | true -> { goNsg with Edges = (nodeA, nodeB, false) :: goNsg.Edges }
+
+                (goNsg, edges) ||> List.fold (fun goNsg (a, b, e) ->
+                    let (nodeA, rankA, nameA) = getNodeName a |> findRealSequenceNode goNsg
+                    let (nodeB, rankB, nameB) = getNodeName b |> findRealSequenceNode goNsg
+                    match abs(rankA - rankB) with
+                    | 1 -> { goNsg with Edges = (nodeA, nodeB, false) :: goNsg.Edges }
+                    | _ -> addVirtualNodesBetweenRanks goNsg (nodeA, rankA, nameA) (nodeB, rankB, nameB))
+
+            /// Get the edges in the discovered model that are not part of any node sequence, as known from the process skeleton that was discovered earlier
+            let edgesNotInRankGraph (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
+                model.Edges |> List.filter (fun (a, b, _) ->
+                    let aName, bName = getNodeName a, getNodeName b
+                    skeleton |> List.exists (fun nodeSeq ->
+                        nodeSeq |> List.exists (fun (node, _) ->
+                            match node with
+                            | Edge(a, b) -> a = aName && b = bName
+                            | _ -> false
+                        )) |> not)
+
+            let missingEdges = edgesNotInRankGraph skeleton model
+            addFromGoNsg goNsg |> addEdges missingEdges
 
         // Go through all the nodes in the model, find them in the global order NSG and assign initial x positions in the interval [-1,1]
-        let initialOrder (goNsg: GlobalOrderNodeSequenceGraph) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * SequenceNode> =
+        let initialOrder (goNsg: CrossMinNsg) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * CrossMinNode> =
 
             /// Calculate the X position for nodes in the range of [-1, 1], based on their X position and how many there are on this side of the backbone
-            let calculateXPos nodes =
+            let calculateXPos (nodes: CrossMinNode list) =
                 nodes
-                |> List.sortBy fst
-                |> List.map (fun (x, n) -> (float32(x) / float32(nodes.Length + 1), n))
+                |> List.sortBy (fun n -> match n with | Sequence(x, _) -> x | _ -> failwith "No non-sequence nodes allowed here")
+                |> List.map (fun n -> match n with | Sequence(x, n) -> (float32(x) / float32(nodes.Length + 1), Sequence(x,n)) | _ -> failwith "No non-sequence nodes allowed here")
 
-            let nodesByRank = goNsg.Nodes |> List.groupBy (fun (_, n) -> getRank n)
-            (({ Nodes = []; Edges = [] }: DirectedGraph<float32 * SequenceNode>), nodesByRank) ||> List.fold (fun state value ->
-                 match value |> snd with
-                 | [_, n] -> { state with Nodes = (0f, n) :: state.Nodes }
-                 | nodes ->
-                    let backboneNodeIdx = nodes |> List.tryFindIndex (fun (x, _) -> x = 0) // Check whether there is a backbone node on this rank
-                    let s = match backboneNodeIdx with | Some idx -> { state with Nodes = (0f, nodes[idx] |> snd) :: state.Nodes } | _ -> state // Add backbone node with value 0
-                    let nodes = match backboneNodeIdx with | Some idx -> nodes |> List.removeAt idx | _ -> nodes // Remove backbone node from list if exists
-                    let (left, right) = nodes |> List.partition (fun (xPos, _) -> xPos < 0) // Partition nodes into left or right of backbone
-                    let s = { s with Nodes = s.Nodes |> List.append (calculateXPos left) }
-                    let s = { s with Nodes = s.Nodes |> List.append (calculateXPos right) }
-                    s
-            )
+            let findRealNode (graph: DirectedGraph<float32 * CrossMinNode>) nodeName =
+                graph.Nodes |> List.pick (fun (initVal, n) ->
+                    match n with
+                    | Sequence(x, n) ->
+                        let name = getName n
+                        if name.IsSome && name.Value = nodeName then Some(x, initVal, n) else None
+                    | _ -> None)
 
-        initialOrder goNsg model
+            let addEdges (edges: (CrossMinNode * CrossMinNode * bool) list) (graph: DirectedGraph<float32 * CrossMinNode>) =
+                graph
+
+            let addNonSequenceNodes (nodes: CrossMinNode list) (graph: DirectedGraph<float32 * CrossMinNode>) =
+
+                let calculateNonSeqXPos (graph: DirectedGraph<float32 * CrossMinNode>) (node: CrossMinNode) =
+                    match node with
+                    | Sequence _ -> failwith "Sequence node not allowed here"
+                    | NonSequence(rank, a, b) ->
+                        let (xposA, initValA, nodeA), (xposB, initValB, nodeB) = findRealNode graph a, findRealNode graph b
+                        let rankA, rankB = getRank nodeA, getRank nodeB
+
+                        // Calculation from Mennens 2019, section 3.4
+                        if initValA > initValB then initValA
+                        else if initValA <= initValB && xposA <> 0 && xposB <> 0 then initValB
+                        else if xposA = 0 && xposB = 0 && rankA > rankB then 0.001f else -0.001f
+
+                (graph, nodes) ||> List.fold (fun graph node ->
+                    match node with
+                    | Sequence _ -> graph
+                    | NonSequence _ -> { graph with Nodes = (node |> calculateNonSeqXPos graph, node) :: graph.Nodes })
+
+            /// Get the rank of a node in cross min form
+            let getCrossMinRank = function
+                | Sequence(_, n) -> getRank n
+                | NonSequence(r, _, _) -> r
+
+            let nodesByRank = goNsg.Nodes |> List.groupBy (fun n -> getCrossMinRank n)
+            (({ Nodes = []; Edges = [] }: DirectedGraph<float32 * CrossMinNode>), nodesByRank) ||> List.fold (fun state (_, nodes) ->
+                let sequenceNodes = nodes |> List.filter (fun n -> match n with | Sequence _ -> true | _ -> false)
+                let backboneNode = sequenceNodes |> List.minBy (fun n -> match n with | Sequence(_, n) -> getDiscoveryIndex n | _ -> failwith "No non-sequence nodes allowed here")
+                let state = { state with Nodes = (0f, backboneNode) :: state.Nodes } // Add backbone node with value 0
+                let sequenceNodes = sequenceNodes |> List.removeAt (sequenceNodes |> List.findIndex (fun n -> n = backboneNode)) // Remove from list to avoid duplicate
+                let (left, right) = sequenceNodes |> List.partition (fun n -> match n with | Sequence(x, _) -> x < 0 | _ -> failwith "No non-sequence nodes allowed here")
+                let state = { state with Nodes = state.Nodes |> List.append (calculateXPos left) }
+                let state = { state with Nodes = state.Nodes |> List.append (calculateXPos right) }
+                state) |> addNonSequenceNodes goNsg.Nodes |> addEdges goNsg.Edges
+
+        let goNsgWithNonSequenceEdges = insertNonSequenceNodesAndEdges goNsg skeleton model
+        initialOrder goNsgWithNonSequenceEdges model
 
     /// Convert a completed global order graph into a more friendly format for consumers
     let internal convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) =

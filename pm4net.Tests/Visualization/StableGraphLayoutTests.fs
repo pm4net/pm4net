@@ -64,3 +64,12 @@ module ``Stable graph layout tests`` =
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
         globalOrder |> Assert.NotNull
+
+    [<Fact>]
+    let ``Can discover global order from 'GitHub pm4py' log and discovered DFG`` () =
+        let json = File.ReadAllText("github_pm4py.jsonocel")
+        let log = OcelJson.deserialize true json
+        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
+        let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
+        globalOrder |> Assert.NotNull
