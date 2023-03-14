@@ -66,6 +66,12 @@ module ``Stable graph layout tests`` =
         let log = log.MergeDuplicateObjects()
         let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["CorrelationId"], log)
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+
+        // For printing NSG with DOT (only works with neato or fdp layout)
+        let (rg, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
+        let nsg = (rg, skeleton) ||> StableGraphLayout.computeGlobalRanking
+        let dot = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
+
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
         globalOrder |> Assert.NotNull
 
@@ -75,5 +81,11 @@ module ``Stable graph layout tests`` =
         let log = OcelJson.deserialize true json
         let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+
+        // For printing NSG with DOT (only works with neato or fdp layout)
+        let (rg, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
+        let nsg = (rg, skeleton) ||> StableGraphLayout.computeGlobalRanking
+        let dot = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
+
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
         globalOrder |> Assert.NotNull
