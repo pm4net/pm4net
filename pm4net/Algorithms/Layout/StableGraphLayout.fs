@@ -16,11 +16,11 @@ do()
 [<AbstractClass; Sealed>]
 type StableGraphLayout private() =
 
-    static member private toCSharpFriendly (rg: GlobalRankGraph, sk: Skeleton, comp: Components) =
+    static member internal toCSharpFriendly (rg: GlobalRankGraph, sk: Skeleton, comp: Components) =
         rg, sk |> List.map Seq.ofList |> seq, comp |> List.map Set.toSeq |> seq
 
     /// Extract the unique variations in the flattened log and order them by importance, with an optional object type that is added as a start and end to all variations
-    static member private variationsInLog objType log =
+    static member internal variationsInLog objType log =
 
         /// Removes direct repetitions in a list (e.g. [A,A,B,C,C] -> [A,B,C]). Section 2.1 of Mennens 2018.
         let removeDirectRepetitions comparer trace =
@@ -59,7 +59,7 @@ type StableGraphLayout private() =
         |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Sequence = (cnt, t) ||> simpleSequence })
 
     /// Compute a global ranking based on a rank graph and skeleton
-    static member private computeGlobalRanking rankGraph skeleton =
+    static member internal computeGlobalRanking rankGraph skeleton =
         let nodeSequenceGraph = (rankGraph, skeleton) ||> GraphLayoutAlgo.computeNodeSequenceGraph
         (rankGraph, nodeSequenceGraph) ||> GraphLayoutAlgo.computeGlobalOrder
 

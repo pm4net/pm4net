@@ -6,6 +6,7 @@ open System.IO
 open System.Collections.Generic
 open pm4net.Types.GraphLayout
 open pm4net.Algorithms.Layout
+open pm4net.Visualization.Layout
 
 module Assertions =
 
@@ -39,6 +40,7 @@ module ``Stable graph layout tests`` =
         let log = OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let dot = LayoutStepsVisualizer.globalRankGraphToDot rankGraph
         rankGraph |> Assert.NotNull
 
     [<Fact>]
@@ -46,6 +48,7 @@ module ``Stable graph layout tests`` =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let dot = LayoutStepsVisualizer.globalRankGraphToDot rankGraph
         rankGraph |> Assert.NotNull
 
     [<Fact>]
@@ -53,6 +56,7 @@ module ``Stable graph layout tests`` =
         let json = File.ReadAllText("recruiting.jsonocel")
         let log = OcelJson.deserialize true json
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let dot = LayoutStepsVisualizer.globalRankGraphToDot rankGraph
         rankGraph |> Assert.NotNull
 
     [<Fact>]

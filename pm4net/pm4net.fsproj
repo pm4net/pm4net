@@ -31,6 +31,7 @@
     <Compile Include="Algorithms\Discovery\Ocel\OcelPetriNet.fs" />
     <Compile Include="Algorithms\Layout\GraphLayoutAlgo.fs" />
     <Compile Include="Algorithms\Layout\StableGraphLayout.fs" />
+    <Compile Include="Visualization\Layout\LayoutStepsVisualizer.fs" />
     <Compile Include="Visualization\Ocel\Graphviz.fs" />
 	<Content Include="..\README.md" Pack="true" PackagePath="\">
 	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

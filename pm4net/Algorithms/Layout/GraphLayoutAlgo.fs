@@ -594,17 +594,17 @@ module internal GraphLayoutAlgo =
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
     /// Minimize edge crossings for a discovered model
-    let internal minimizeEdgeCrossings (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * CrossMinNode, bool> =
+    let internal minimizeEdgeCrossings goNsg skeleton model =
 
         /// Convert a global order NSG to a temporary NSG for crossing minimisation, adding non-sequence nodes and edges from the discovered model
-        let insertNodesAndEdges goNsg skeleton model : CrossMinNsg =
+        let insertNodesAndEdges goNsg skeleton model =
 
             /// Add existing nodes and edges from the global order node sequence graph to the modified datatype which may contain non-sequence nodes and edges
             let addFromGoNsg (goNsg: GlobalOrderNodeSequenceGraph) : CrossMinNsg =
                 { Nodes = goNsg.Nodes |> List.map (fun (x, n) -> Sequence(x, n)); Edges = goNsg.Edges |> List.map (fun ((ax, an), (bx, bn)) -> (Sequence(ax, an), Sequence(bx, bn), true)) }
 
             /// Add non-sequence edges to cross-min node sequence graph
-            let addEdges (edges: (Graphs.Node * Graphs.Node * Graphs.Edge) list) (goNsg: CrossMinNsg) =
+            let addEdges edges goNsg =
 
                 /// Find a real sequence node in the CrossMinNsg with a given name, and return the node and its rank
                 let findRealSequenceNode (goNsg: CrossMinNsg) nodeName =
@@ -627,15 +627,17 @@ module internal GraphLayoutAlgo =
                         addVirtualNodesBetweenRanks goNsg (virtualNode, nextRank, nameA) (nodeB, rankB, nameB)
                     | true -> { goNsg with Edges = (nodeA, nodeB, false) :: goNsg.Edges }
 
-                (goNsg, edges) ||> List.fold (fun goNsg (a, b, e) ->
+                (goNsg, edges) ||> List.fold (fun goNsg (a, b, _) ->
                     let (nodeA, rankA, nameA) = getNodeName a |> findRealSequenceNode goNsg
                     let (nodeB, rankB, nameB) = getNodeName b |> findRealSequenceNode goNsg
-                    match abs(rankA - rankB) with
-                    | 1 -> { goNsg with Edges = (nodeA, nodeB, false) :: goNsg.Edges }
-                    | _ -> addVirtualNodesBetweenRanks goNsg (nodeA, rankA, nameA) (nodeB, rankB, nameB))
+                    if nameA <> nameB then
+                        match abs(rankA - rankB) with
+                        | 1 -> { goNsg with Edges = (nodeA, nodeB, false) :: goNsg.Edges }
+                        | _ -> addVirtualNodesBetweenRanks goNsg (nodeA, rankA, nameA) (nodeB, rankB, nameB)
+                    else goNsg)
 
             /// Get the edges in the discovered model that are not part of any node sequence, as known from the process skeleton that was discovered earlier
-            let edgesNotInRankGraph (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
+            let edgesNotInRankGraph skeleton model =
                 model.Edges |> List.filter (fun (a, b, _) ->
                     let aName, bName = getNodeName a, getNodeName b
                     skeleton |> List.exists (fun nodeSeq ->
@@ -710,7 +712,11 @@ module internal GraphLayoutAlgo =
                 let state = { state with Nodes = state.Nodes |> List.append (calculateXPos right) }
                 state) |> addNonSequenceNodes goNsg.Nodes |> addEdges goNsg.Edges
 
-        insertNodesAndEdges goNsg skeleton model |> initialOrder
+        let sortOrder (graph: CrossMinNsgWithPos) =
+            // TODO: Sort nodes based on assigned position, and sort non-sequence virtual nodes based on heuristic (longer edges outermost, if same length then edge weight)
+            graph
+
+        insertNodesAndEdges goNsg skeleton model |> initialOrder |> sortOrder
 
     /// Convert a completed global order graph into a more friendly format for consumers
     let internal convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) =
