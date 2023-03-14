@@ -37,7 +37,7 @@ type LayoutStepsVisualizer private () =
         sb.ToString()
 
     /// Only works with Neato or Fdp layout engine
-    static member nodeSequenceGraphToDot (nsg: GlobalOrderNodeSequenceGraph) =
+    static member nodeSequenceGraphToDot (nsg: NodeSequenceGraph) =
 
         let getDiscoveryIndex = function
             | Real(_, idx, _)
@@ -51,9 +51,50 @@ type LayoutStepsVisualizer private () =
             | Real _ -> "square"
             | Virtual _ -> "circle"
 
-        let getColor = function
-            | 0 -> "red"
-            | _ -> "black"
+        let getId = function
+            | Real(_, _, n) -> n
+            | Virtual(r, dIdx) -> $"{r}_{dIdx}"
+
+        let getNodesByRanks (nodes: SequenceNode list) =
+            nodes |> List.groupBy (fun n -> getRank n)
+
+        let addNodes (nodes: SequenceNode list) (sb: StringBuilder) =
+            let ranks = getNodesByRanks nodes |> Map.ofList
+            (sb, nodes) ||> List.fold (fun sb node ->
+                let rank = getRank node
+                let nodesByDiscIdx = ranks[rank] |> List.sortBy getDiscoveryIndex
+                let posInSorted = nodesByDiscIdx |> List.findIndex (fun n -> n = node)
+                let isBackbone = posInSorted = 0
+                sb.AppendLine $""""{getId node}" [label="{getDiscoveryIndex node}" pos="{posInSorted},-{rank}!" shape={getShape node} color={if isBackbone then "red" else "black"} style=filled fillcolor="#fff2cc"]""")
+
+        let addEdges (edges: (SequenceNode * SequenceNode) list) (sb: StringBuilder) =
+            (sb, edges) ||> List.fold (fun sb (a, b) ->
+                sb.AppendLine $"\"{getId a}\" -> \"{getId b}\" [arrowhead=none]")
+
+        let sb = StringBuilder()
+        let sb = sb.AppendLine "digraph dfg {"
+        let sb = sb.AppendLine "splines=false"
+        let sb = sb.AppendLine ""
+        let sb = sb |> addNodes nsg.Nodes
+        let sb = sb.AppendLine ""
+        let sb = sb |> addEdges nsg.Edges
+        let sb = sb.AppendLine "}"
+        sb.ToString()
+
+    /// Only works with Neato or Fdp layout engine
+    static member nodeSequenceGraphToDot (nsg: GlobalOrderNodeSequenceGraph) =
+
+        let getDiscoveryIndex = function
+            | Real(_, idx, _)
+            | Virtual(_, idx) -> idx
+
+        let getRank = function
+            | Real(r, _, _)
+            | Virtual(r, _) -> r
+
+        let getShape = function
+            | Real _ -> "square"
+            | Virtual _ -> "circle"
 
         let getId = function
             | Real(_, _, n) -> n

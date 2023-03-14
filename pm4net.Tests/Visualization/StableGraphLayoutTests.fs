@@ -68,9 +68,11 @@ module ``Stable graph layout tests`` =
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
 
         // For printing NSG with DOT (only works with neato or fdp layout)
-        let (rg, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
-        let nsg = (rg, skeleton) ||> StableGraphLayout.computeGlobalRanking
-        let dot = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
+        let (rankGraph, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
+        let nsg = (rankGraph, skeleton) ||> GraphLayoutAlgo.computeNodeSequenceGraph
+        let dotNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
+        let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
+        let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
         globalOrder |> Assert.NotNull
@@ -83,9 +85,11 @@ module ``Stable graph layout tests`` =
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
 
         // For printing NSG with DOT (only works with neato or fdp layout)
-        let (rg, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
-        let nsg = (rg, skeleton) ||> StableGraphLayout.computeGlobalRanking
-        let dot = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
+        let (rankGraph, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
+        let nsg = (rankGraph, skeleton) ||> GraphLayoutAlgo.computeNodeSequenceGraph
+        let dotNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
+        let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
+        let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
         globalOrder |> Assert.NotNull
