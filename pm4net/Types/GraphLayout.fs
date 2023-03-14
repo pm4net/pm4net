@@ -30,6 +30,7 @@ type CrossMinNode =
     | Sequence of X: int * Node: SequenceNode
     | NonSequence of Rank: int * A: string * B: string
 type CrossMinNsg = DirectedGraph<CrossMinNode, bool> // Boolean on edges indicate whether edge is constrained or unconstrained
+type CrossMinNsgWithPos = DirectedGraph<float32 * CrossMinNode, bool>
 
 /// Type to represent a variation of a trace, with all its events, a sequence of nodes and edges, and the frequency of the variation
 type internal Variation<'a, 'b> = {

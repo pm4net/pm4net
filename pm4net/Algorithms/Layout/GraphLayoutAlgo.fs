@@ -594,10 +594,10 @@ module internal GraphLayoutAlgo =
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
     /// Minimize edge crossings for a discovered model
-    let internal minimizeEdgeCrossings (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * CrossMinNode> =
+    let internal minimizeEdgeCrossings (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * CrossMinNode, bool> =
 
         /// Convert a global order NSG to a temporary NSG for crossing minimisation, adding non-sequence nodes and edges from the discovered model
-        let insertNonSequenceNodesAndEdges (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) model : CrossMinNsg =
+        let insertNodesAndEdges goNsg skeleton model : CrossMinNsg =
 
             /// Add existing nodes and edges from the global order node sequence graph to the modified datatype which may contain non-sequence nodes and edges
             let addFromGoNsg (goNsg: GlobalOrderNodeSequenceGraph) : CrossMinNsg =
@@ -649,7 +649,7 @@ module internal GraphLayoutAlgo =
             addFromGoNsg goNsg |> addEdges missingEdges
 
         // Go through all the nodes in the model, find them in the global order NSG and assign initial x positions in the interval [-1,1]
-        let initialOrder (goNsg: CrossMinNsg) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) : DirectedGraph<float32 * CrossMinNode> =
+        let initialOrder (goNsg: CrossMinNsg) : CrossMinNsgWithPos =
 
             /// Calculate the X position for nodes in the range of [-1, 1], based on their X position and how many there are on this side of the backbone
             let calculateXPos (nodes: CrossMinNode list) =
@@ -657,7 +657,8 @@ module internal GraphLayoutAlgo =
                 |> List.sortBy (fun n -> match n with | Sequence(x, _) -> x | _ -> failwith "No non-sequence nodes allowed here")
                 |> List.map (fun n -> match n with | Sequence(x, n) -> (float32(x) / float32(nodes.Length + 1), Sequence(x,n)) | _ -> failwith "No non-sequence nodes allowed here")
 
-            let findRealNode (graph: DirectedGraph<float32 * CrossMinNode>) nodeName =
+            /// Find the real sequence node based on the name
+            let findRealNode (graph: CrossMinNsgWithPos) nodeName =
                 graph.Nodes |> List.pick (fun (initVal, n) ->
                     match n with
                     | Sequence(x, n) ->
@@ -665,19 +666,24 @@ module internal GraphLayoutAlgo =
                         if name.IsSome && name.Value = nodeName then Some(x, initVal, n) else None
                     | _ -> None)
 
-            let addEdges (edges: (CrossMinNode * CrossMinNode * bool) list) (graph: DirectedGraph<float32 * CrossMinNode>) =
-                graph
+            /// Add missing edges by finding nodes with assigned positions and re-adding them to the graph
+            let addEdges (edges: (CrossMinNode * CrossMinNode * bool) list) (graph: CrossMinNsgWithPos) =
+                (graph, edges) ||> List.fold (fun graph (a, b, constrained) ->
+                    let aNode = graph.Nodes |> List.find (fun n -> snd n = a)
+                    let bNode = graph.Nodes |> List.find (fun n -> snd n = b)
+                    { graph with Edges = (aNode, bNode, constrained) :: graph.Edges })
 
-            let addNonSequenceNodes (nodes: CrossMinNode list) (graph: DirectedGraph<float32 * CrossMinNode>) =
+            /// Add a non-sequence node to the cross-min graph
+            let addNonSequenceNodes (nodes: CrossMinNode list) (graph: CrossMinNsgWithPos) =
 
-                let calculateNonSeqXPos (graph: DirectedGraph<float32 * CrossMinNode>) (node: CrossMinNode) =
+                /// Calculate the X position of a non-sequence node based on Mennens 2019, Section 3.4
+                let calculateNonSeqXPos (graph: CrossMinNsgWithPos) (node: CrossMinNode) =
                     match node with
                     | Sequence _ -> failwith "Sequence node not allowed here"
                     | NonSequence(rank, a, b) ->
                         let (xposA, initValA, nodeA), (xposB, initValB, nodeB) = findRealNode graph a, findRealNode graph b
                         let rankA, rankB = getRank nodeA, getRank nodeB
 
-                        // Calculation from Mennens 2019, section 3.4
                         if initValA > initValB then initValA
                         else if initValA <= initValB && xposA <> 0 && xposB <> 0 then initValB
                         else if xposA = 0 && xposB = 0 && rankA > rankB then 0.001f else -0.001f
@@ -692,8 +698,9 @@ module internal GraphLayoutAlgo =
                 | Sequence(_, n) -> getRank n
                 | NonSequence(r, _, _) -> r
 
+            // Group real and virtual nodes by rank, and then assign values between -1 and 1 to them
             let nodesByRank = goNsg.Nodes |> List.groupBy (fun n -> getCrossMinRank n)
-            (({ Nodes = []; Edges = [] }: DirectedGraph<float32 * CrossMinNode>), nodesByRank) ||> List.fold (fun state (_, nodes) ->
+            (({ Nodes = []; Edges = [] }: CrossMinNsgWithPos), nodesByRank) ||> List.fold (fun state (_, nodes) ->
                 let sequenceNodes = nodes |> List.filter (fun n -> match n with | Sequence _ -> true | _ -> false)
                 let backboneNode = sequenceNodes |> List.minBy (fun n -> match n with | Sequence(_, n) -> getDiscoveryIndex n | _ -> failwith "No non-sequence nodes allowed here")
                 let state = { state with Nodes = (0f, backboneNode) :: state.Nodes } // Add backbone node with value 0
@@ -703,8 +710,7 @@ module internal GraphLayoutAlgo =
                 let state = { state with Nodes = state.Nodes |> List.append (calculateXPos right) }
                 state) |> addNonSequenceNodes goNsg.Nodes |> addEdges goNsg.Edges
 
-        let goNsgWithNonSequenceEdges = insertNonSequenceNodesAndEdges goNsg skeleton model
-        initialOrder goNsgWithNonSequenceEdges model
+        insertNodesAndEdges goNsg skeleton model |> initialOrder
 
     /// Convert a completed global order graph into a more friendly format for consumers
     let internal convertGlobalOrderToFriendlyFormat (graph: GlobalOrderNodeSequenceGraph) =
