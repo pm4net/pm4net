@@ -424,9 +424,7 @@ module internal GraphLayoutAlgo =
                             // Only add virtual nodes up to the rank just before the target, and then connect it to the actual target node via an edge
                             let nsg, nodeToConnect = addVirtualNodesAndEdgesBetweenRanks nsg rankA nodeA (if rankA - rankB >= 0 then rankB + 1 else rankB - 1) idx
                             addEdgeIfNotExists nsg nodeToConnect nodeB |> fst
-                | _ -> nsg
-            )
-        )
+                | _ -> nsg))
 
     /// Compute a global order given a global rank graph and a node sequence graph
     let internal computeGlobalOrder (rankGraph: GlobalRankGraph) (nsg: NodeSequenceGraph) =
@@ -582,7 +580,13 @@ module internal GraphLayoutAlgo =
             nsg.Nodes
             |> List.groupBy getRank
             |> List.sortBy fst
-            |> List.map (fun (rank, nodes) -> rank, nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n))
+            |> List.map (fun (rank, nodes) ->
+                let sorted = nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n)
+                let backboneNodeIdx = sorted |> List.findIndex (fun n -> backbone |> List.contains n)
+                rank, sorted |> List.permute (fun i ->
+                    if i = backboneNodeIdx then 0 // Move the backbone node back to the front
+                    else if i < backboneNodeIdx then i + 1 // If the node was ordered below the backbone node, add one since it is moved down
+                    else i)) // Was right of backbone node anyway, nothing to do
 
         // Convert the existing NSG into a global order graph by inserting X position into nodes
         let globalOrderNsg = createGlobalOrderNsg nsg nodesByRankSorted
