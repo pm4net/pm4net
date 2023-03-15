@@ -452,8 +452,7 @@ module internal GraphLayoutAlgo =
         /// Get a sort value for a given node based on the backbone connectedness of its node sequence
         let connectednessSort (nsg: NodeSequenceGraph) backboneSeqs node =
             let nodeSequence = node |> nodeSequence nsg
-            let sortValue = backboneSeqs |> List.sumBy (fun seq -> sequenceConnectedness rankGraph nsg seq nodeSequence)
-            sortValue - getDiscoveryIndex node // Experimental method to place nodes with lower disc. index closer to backbone when sort value is 0
+            backboneSeqs |> List.sumBy (fun seq -> sequenceConnectedness rankGraph nsg seq nodeSequence)
 
         /// Find the connected components when excluding backbone nodes
         let findComponents (nsg: NodeSequenceGraph) backbone =
@@ -582,7 +581,8 @@ module internal GraphLayoutAlgo =
             |> List.groupBy getRank
             |> List.sortBy fst
             |> List.map (fun (rank, nodes) ->
-                let sorted = nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n)
+                // Secondary sort key sorts based on discovery index if connectedness sort has the same result. Lower discovery indices are preferred.
+                let sorted = nodes |> List.sortByDescending (fun n -> connectednessSort nsg backboneSequences n, -(getDiscoveryIndex n))
                 let backboneNodeIdx = sorted |> List.findIndex (fun n -> backbone |> List.contains n)
                 rank, sorted |> List.permute (fun i ->
                     if i = backboneNodeIdx then 0 // Move the backbone node back to the front
