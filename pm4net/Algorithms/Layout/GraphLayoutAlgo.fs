@@ -452,7 +452,8 @@ module internal GraphLayoutAlgo =
         /// Get a sort value for a given node based on the backbone connectedness of its node sequence
         let connectednessSort (nsg: NodeSequenceGraph) backboneSeqs node =
             let nodeSequence = node |> nodeSequence nsg
-            backboneSeqs |> List.sumBy (fun seq -> sequenceConnectedness rankGraph nsg seq nodeSequence)
+            let sortValue = backboneSeqs |> List.sumBy (fun seq -> sequenceConnectedness rankGraph nsg seq nodeSequence)
+            sortValue - getDiscoveryIndex node // Experimental method to place nodes with lower disc. index closer to backbone when sort value is 0
 
         /// Find the connected components when excluding backbone nodes
         let findComponents (nsg: NodeSequenceGraph) backbone =
@@ -598,7 +599,7 @@ module internal GraphLayoutAlgo =
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
     /// Minimize edge crossings for a discovered model
-    let internal minimizeEdgeCrossings goNsg skeleton model =
+    let internal minimizeEdgeCrossings goNsg skeleton rankGraph model =
 
         /// Convert a global order NSG to a temporary NSG for crossing minimisation, adding non-sequence nodes and edges from the discovered model
         let insertNodesAndEdges goNsg skeleton model =

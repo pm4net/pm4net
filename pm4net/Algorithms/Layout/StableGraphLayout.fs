@@ -116,7 +116,7 @@ type StableGraphLayout private() =
     static member ComputeGlobalOrder (rankGraph, skeleton, components, discoveredModel) =
         let (rankGraph, _) = (rankGraph, components, discoveredModel) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
         let globalOrder = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
-        (globalOrder, skeleton, discoveredModel) |||> GraphLayoutAlgo.minimizeEdgeCrossings //|> GraphLayoutAlgo.convertGlobalOrderToFriendlyFormat
+        GraphLayoutAlgo.minimizeEdgeCrossings globalOrder skeleton rankGraph discoveredModel //|> GraphLayoutAlgo.convertGlobalOrderToFriendlyFormat
 
     /// Compute a global order for a global rank graph by the means of a discovered model that is a subgraph of the global rank graph.
     static member ComputeGlobalOrder (rankGraph: GlobalRankGraph, skeleton: (SequenceElement<string> * int) seq seq, components: string seq seq, discoveredModel: DirectedGraph<Graphs.Node, Graphs.Edge>) =
