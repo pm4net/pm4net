@@ -70,11 +70,13 @@ module ``Stable graph layout tests`` =
         // For printing NSG with DOT (only works with neato or fdp layout)
         let (rankGraph, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
         let nsg = (rankGraph, skeleton) ||> GraphLayoutAlgo.computeNodeSequenceGraph
+        let dotRg = LayoutStepsVisualizer.globalRankGraphToDot rankGraph
         let dotNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
         let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
+        let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
         globalOrder |> Assert.NotNull
 
     [<Fact>]
@@ -92,4 +94,5 @@ module ``Stable graph layout tests`` =
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
+        let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
         globalOrder |> Assert.NotNull
