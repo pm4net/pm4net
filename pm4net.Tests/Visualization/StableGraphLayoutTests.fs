@@ -64,8 +64,8 @@ module ``Stable graph layout tests`` =
         let json = File.ReadAllText("blazor-logs.jsonocel")
         let log = OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
-        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["CorrelationId"], log)
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["CorrelationId"], log)
 
         // For printing NSG with DOT (only works with neato or fdp layout)
         let (rankGraph, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
@@ -76,14 +76,14 @@ module ``Stable graph layout tests`` =
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
-        let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
+        //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
         globalOrder |> Assert.NotNull
 
     [<Fact>]
     let ``Can discover global order from 'GitHub pm4py' log and discovered DFG`` () =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
-        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
+        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["case:concept:name"], log)
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
 
         // For printing NSG with DOT (only works with neato or fdp layout)
@@ -94,5 +94,5 @@ module ``Stable graph layout tests`` =
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
         let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
-        let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
+        //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
         globalOrder |> Assert.NotNull

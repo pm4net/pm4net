@@ -25,6 +25,25 @@ type SequenceNode =
 type NodeSequenceGraph = DirectedGraph<SequenceNode>
 type GlobalOrderNodeSequenceGraph = DirectedGraph<int * SequenceNode> // Integer indicates the X position of the node
 
+// Types for the actual discovered graph with real X,Y positions for nodes and virtual nodes
+
+type Position = {
+    X: float32
+    Y: int
+}
+
+type Connection = {
+    A: string
+    B: string
+}
+
+type GraphNode =
+    | ConstrainedReal of Position: Position * DiscoveryIndex: int * Name: string
+    | ConstrainedVirtual of Position: Position * DiscoveryIndex: int
+    | UnconstrainedVirtual of Position: Position * Connection
+type EdgeWeight = int
+type DiscoveredGraph = DirectedGraph<GraphNode, EdgeWeight>
+
 /// Types for the crossing minimisation when non-sequence edges are also added to the NSG, but in an unconstrained fashion
 type CrossMinNode =
     | Sequence of X: int * Node: SequenceNode
