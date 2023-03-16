@@ -75,9 +75,9 @@ module ``Stable graph layout tests`` =
         let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
-        let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
+        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
         //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
-        globalOrder |> Assert.NotNull
+        discoveredGraph |> Assert.NotNull
 
     [<Fact>]
     let ``Can discover global order from 'GitHub pm4py' log and discovered DFG`` () =
@@ -93,6 +93,6 @@ module ``Stable graph layout tests`` =
         let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
-        let globalOrder = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
+        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
         //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
-        globalOrder |> Assert.NotNull
+        discoveredGraph |> Assert.NotNull

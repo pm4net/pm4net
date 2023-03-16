@@ -640,8 +640,7 @@ module internal GraphLayoutAlgo =
                 | Virtual(rank, vIdx) -> graph.Nodes |> List.find (fun n ->
                     match n with
                     | ConstrainedVirtual(pos, idx) -> pos.Y = rank && vIdx = idx
-                    | UnconstrainedVirtual(pos, _) -> pos.Y = rank // TODO: Figure out how to properly identify those, if necessary
-                    | _ -> false)
+                    | _ -> false) // Unconstrained virtual nodes not supported, since they are not yet present in the graph and cannot unqiuely identified by the given sequence node.
 
             /// Extract the position value from any of the node types
             let getPosition = function
@@ -707,8 +706,31 @@ module internal GraphLayoutAlgo =
                             { graph with Edges = (start |> findNodeFromSeqNode graph, target |> findNodeFromSeqNode graph, edge.Statistics.Frequency) :: graph.Edges }) |> fun g -> g, true
                     | None -> graph, false // Adding the edge was not successful, likely because it isn't actually constrainted. Return false to add the edge as unconstrained instead.
 
+            /// Add an unconstrained edge to the graph, adding unconstrained virtual nodes if it spans multiple ranks
             let addUnconstrainedEdge a b edge graph =
-                graph
+
+                /// Add a sequence of virtual unconstrained nodes with an initial ordering between two constrained nodes
+                let rec addVirtualNodesBetweenRanks (graph: DiscoveredGraph) (nodeA, nameA, posA: Position) (nodeB, nameB, posB: Position) edgeWeight =
+                    let upwards = posA.Y - posB.Y >= 0 // Whether the direction is upwards or downwards
+                    let nextRank = posA.Y + if upwards then -1 else 1 // The next rank to consider in the given direction
+                    match nextRank = posB.Y with
+                    | false ->
+                        let xPos = if posA.X < posB.X then posB.X - 0.5f else posB.X + 0.5f
+                        let nodePos : Position = { X = xPos; Y = nextRank }
+                        let unconstrainedNode = UnconstrainedVirtual(nodePos, { A = nameA; B = nameB })
+                        let graph = { graph with Nodes = unconstrainedNode :: graph.Nodes; Edges = (nodeA, unconstrainedNode, edgeWeight) :: graph.Edges }
+                        addVirtualNodesBetweenRanks graph (unconstrainedNode, nameA, nodePos) (nodeB, nameB, posB) edgeWeight
+                    | true -> { graph with Edges = (nodeA, nodeB, edgeWeight) :: graph.Edges }
+
+                let nameA, nameB = getNodeName a, getNodeName b
+                let nodeA, nodeB = findNode graph nameA, findNode graph nameB
+                let posA, posB = getPosition nodeA, getPosition nodeB
+                match nameA = nameB with
+                | true -> graph
+                | _ -> 
+                    match abs(posA.Y - posB.Y) with
+                    | 1 -> { graph with Edges = (nodeA, nodeB, edge.Statistics.Frequency) :: graph.Edges }
+                    | _ -> addVirtualNodesBetweenRanks graph (nodeA, nameA, posA) (nodeB, nameB, posB) edge.Statistics.Frequency
 
             match skeleton |> isConstrained a b with
             | true ->
@@ -718,7 +740,7 @@ module internal GraphLayoutAlgo =
                 | graph, false -> graph |> addUnconstrainedEdge a b edge
             | false -> graph |> addUnconstrainedEdge a b edge)
 
-        graph
+        graph // TODO: Now remove unused virtual nodes and close gaps again (or first do that at the end anyway, before determining x positions of unconstrained virtual nodes)
 
     /// Minimize edge crossings for a discovered model
     let internal minimizeEdgeCrossings goNsg skeleton model =
