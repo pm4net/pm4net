@@ -35,14 +35,14 @@ type Position = {
 type Connection = {
     A: string
     B: string
+    Weight: int
 }
 
 type GraphNode =
     | ConstrainedReal of Position: Position * DiscoveryIndex: int * Name: string
     | ConstrainedVirtual of Position: Position * DiscoveryIndex: int
     | UnconstrainedVirtual of Position: Position * Connection
-type EdgeWeight = int
-type DiscoveredGraph = DirectedGraph<GraphNode, EdgeWeight>
+type DiscoveredGraph = DirectedGraph<GraphNode>
 
 /// Types for the crossing minimisation when non-sequence edges are also added to the NSG, but in an unconstrained fashion
 type CrossMinNode =

@@ -147,12 +147,12 @@ type LayoutStepsVisualizer private () =
         let addNodes (nodes: GraphNode list) (sb: StringBuilder) =
             (sb, nodes) ||> List.fold (fun sb node ->
                 match node with
-                | ConstrainedReal(pos, _, name) -> sb.AppendLine $""""{getId node}" [label="{getFloat pos.X}, {pos.Y}" pos="{getFloat pos.X},-{pos.Y}!" shape=box style=filled fillcolor="#fff2cc"]"""
-                | ConstrainedVirtual(pos, idx) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="red" point-size="10">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor="red"]"""
+                | ConstrainedReal(pos, _, name) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="black" point-size="6">{getFloat pos.X},{pos.Y}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=square style=filled fillcolor="#fff2cc" width="0.1"]"""
+                | ConstrainedVirtual(pos, idx) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="red" point-size="6">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor="red" width="0.1"]"""
                 | UnconstrainedVirtual(pos, conn) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="green" point-size="6">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor=green width="0.1"]""")
 
-        let addEdges (edges: (GraphNode * GraphNode * EdgeWeight) list) (sb: StringBuilder) =
-            (sb, edges) ||> List.fold (fun sb (a, b, weight) ->
+        let addEdges (edges: (GraphNode * GraphNode) list) (sb: StringBuilder) =
+            (sb, edges) ||> List.fold (fun sb (a, b) ->
                 sb.AppendLine $""""{getId a}" -> "{getId b}" [label="" arrowsize="0.5" color="{getEdgeColor(a, b)}"]""")
 
         let sb = StringBuilder()
