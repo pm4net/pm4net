@@ -125,6 +125,46 @@ type LayoutStepsVisualizer private () =
         let sb = sb.AppendLine "}"
         sb.ToString()
 
+    /// Only works with Neato layout engine
+    static member discoveredGraphToDot (graph: DiscoveredGraph) =
+
+        let getFloat (num: float32) =
+            num.ToString("0.00", CultureInfo.InvariantCulture)
+
+        let getEdgeColor = function
+            | ConstrainedReal _, ConstrainedReal _
+            | ConstrainedReal _, ConstrainedVirtual _
+            | ConstrainedVirtual _ , ConstrainedReal _
+            | ConstrainedVirtual _, ConstrainedVirtual _ -> "red"
+            | _, UnconstrainedVirtual _
+            | UnconstrainedVirtual _, _ -> "green"
+
+        let getId = function
+            | ConstrainedReal(_, _, name) -> name
+            | ConstrainedVirtual(pos, _) -> $"v {pos.X},{pos.Y}"
+            | UnconstrainedVirtual(pos, conn) -> $"uv {pos.X},{pos.Y} {conn.A}-{conn.B}"
+
+        let addNodes (nodes: GraphNode list) (sb: StringBuilder) =
+            (sb, nodes) ||> List.fold (fun sb node ->
+                match node with
+                | ConstrainedReal(pos, _, name) -> sb.AppendLine $""""{getId node}" [label="{getFloat pos.X}, {pos.Y}" pos="{getFloat pos.X},-{pos.Y}!" shape=box style=filled fillcolor="#fff2cc"]"""
+                | ConstrainedVirtual(pos, idx) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="red" point-size="10">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor="red"]"""
+                | UnconstrainedVirtual(pos, conn) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="green" point-size="6">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor=green width="0.1"]""")
+
+        let addEdges (edges: (GraphNode * GraphNode * EdgeWeight) list) (sb: StringBuilder) =
+            (sb, edges) ||> List.fold (fun sb (a, b, weight) ->
+                sb.AppendLine $""""{getId a}" -> "{getId b}" [label="" arrowsize="0.5" color="{getEdgeColor(a, b)}"]""")
+
+        let sb = StringBuilder()
+        let sb = sb.AppendLine "digraph dfg {"
+        let sb = sb.AppendLine "splines=true"
+        let sb = sb.AppendLine ""
+        let sb = sb |> addNodes graph.Nodes
+        let sb = sb.AppendLine ""
+        let sb = sb |> addEdges graph.Edges
+        let sb = sb.AppendLine "}"
+        sb.ToString()
+
     /// Only works with Neato or Fdp layout engine
     static member crossMinGraphToDot (crossMinNsg: CrossMinNsgWithPos) =
 
