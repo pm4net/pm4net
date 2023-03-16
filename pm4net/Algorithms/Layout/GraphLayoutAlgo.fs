@@ -718,13 +718,8 @@ module internal GraphLayoutAlgo =
                     let initiallySorted = if pos.X > 0f then nodes |> List.sortBy (sortByEdgeLengthAndWeight graph) else nodes |> List.sortByDescending (sortByEdgeLengthAndWeight graph)
                     let availableSpace = pos.X - 0.5f, pos.X + 0.5f // TODO: Improve by actually looking at what else there is
                     (graph, initiallySorted |> List.indexed) ||> List.fold (fun graph (i, node) ->
-                        // Need to swap variables in calculation depending on which side of the backbone we are on
-                        let swap = fst availableSpace >= 0f && snd availableSpace >= 0f
-                        let newX =
-                            if swap then snd availableSpace else fst availableSpace
-                            / float32(initiallySorted.Length + 1)
-                            * float32(i + 1)
-                            + if swap then fst availableSpace else snd availableSpace
+                        let intervals = abs(snd availableSpace - fst availableSpace) / float32(initiallySorted.Length + 1)
+                        let newX = fst availableSpace + (intervals * float32(i + 1))
                         (node, node |> updateXPosition newX) ||> updateNodeAndReferencedEdges graph))
 
         // TODO
@@ -821,6 +816,7 @@ module internal GraphLayoutAlgo =
                     let nextRank = posA.Y + if upwards then -1 else 1 // The next rank to consider in the given direction
                     match nextRank = posB.Y with
                     | false ->
+                        // Puts backwards edges to the right side of the backbone and forward edges on the left side (according to Mennens 2019). Can both be good or bad depending on graph.
                         let xPos = if posA.X < posB.X then posB.X - 0.5f else posB.X + 0.5f
                         let nodePos : Position = { X = xPos; Y = nextRank }
                         let unconstrainedNode = UnconstrainedVirtual(nodePos, { A = nameA; B = nameB; Weight = edgeWeight })
