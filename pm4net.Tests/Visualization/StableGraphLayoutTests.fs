@@ -75,7 +75,7 @@ module ``Stable graph layout tests`` =
         let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
-        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
+        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true)
         let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
 
         //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
@@ -85,7 +85,8 @@ module ``Stable graph layout tests`` =
     let ``Can discover global order from 'GitHub pm4py' log and discovered DFG`` () =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
-        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["case:concept:name"], log)
+        //let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["case:concept:name"], log)
+        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
 
         // For printing NSG with DOT (only works with neato or fdp layout)
@@ -95,7 +96,7 @@ module ``Stable graph layout tests`` =
         let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
-        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg)
+        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true)
         let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
 
         //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder

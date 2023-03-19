@@ -598,8 +598,9 @@ module internal GraphLayoutAlgo =
         // Balance the components by moving some to the left
         balanceComponents globalOrderNsg components backbone nodesByRankSorted
 
-    /// Construct the actual discovered graph by applying the discovered model to the global order, minimising edge crossings as the graph is discovered
-    let internal constructDiscoveredGraph (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
+    /// Construct the actual discovered graph by applying the discovered model to the global order, minimising edge crossings as the graph is discovered.
+    /// Edges that are identical in its origin and destination can be merged together in order to avoid multiple edges in the resulting graph.
+    let internal constructDiscoveredGraph mergeEdges (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
 
         /// Find a real constrained node by its normal node counterpart
         let findNode (graph: DiscoveredGraph) name =
@@ -738,8 +739,13 @@ module internal GraphLayoutAlgo =
                 | Real(rank, idx, name) -> ConstrainedReal({ X = float32 x; Y = rank }, idx, name)
                 | Virtual(rank, idx) -> ConstrainedVirtual({ X = float32 x; Y = rank }, idx))
 
+        // Merge edges with identical origin and destination if specified
+        let edges =
+            if mergeEdges then model.Edges |> List.distinctBy (fun (a, b, _) -> a, b)
+            else model.Edges
+
         // Construct the inital graph by adding all nodes and both constrained and unconstrained edges
-        let graph = (({ Nodes = sequenceNodes; Edges = [] }: DiscoveredGraph), model.Edges) ||> List.fold (fun graph (a, b, edge) ->
+        let graph = (({ Nodes = sequenceNodes; Edges = [] }: DiscoveredGraph), edges) ||> List.fold (fun graph (a, b, edge) ->
 
             /// Find a node in the new graph from a sequence node
             let findNodeFromSeqNode (graph: DiscoveredGraph) = function
