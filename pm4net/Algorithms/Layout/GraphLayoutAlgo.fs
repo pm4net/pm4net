@@ -741,7 +741,12 @@ module internal GraphLayoutAlgo =
 
         // Merge edges with identical origin and destination if specified
         let edges =
-            if mergeEdges then model.Edges |> List.distinctBy (fun (a, b, _) -> a, b)
+            if mergeEdges then
+                model.Edges
+                |> List.groupBy (fun (a, b, _) -> a, b)
+                |> List.map (fun (_, v) ->
+                    let a, b, _ = v.Head
+                    a, b, (0, v) ||> List.fold (fun s (_, _, e) -> s + e.Statistics.Frequency) |> fun w -> { Type = ""; Statistics = { Frequency = w; Durations = []}})
             else model.Edges
 
         // Construct the inital graph by adding all nodes and both constrained and unconstrained edges
