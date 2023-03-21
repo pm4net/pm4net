@@ -600,7 +600,7 @@ module internal GraphLayoutAlgo =
 
     /// Construct the actual discovered graph by applying the discovered model to the global order, minimising edge crossings as the graph is discovered.
     /// Edges that are identical in its origin and destination can be merged together in order to avoid multiple edges in the resulting graph.
-    let internal constructDiscoveredGraph mergeEdges (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
+    let internal constructDiscoveredGraph mergeEdges maxIterations (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
 
         /// Find a real constrained node by its normal node counterpart
         let findNode (graph: DiscoveredGraph) name =
@@ -723,9 +723,50 @@ module internal GraphLayoutAlgo =
                         let newX = fst availableSpace + (intervals * float32(i + 1))
                         (node, node |> updateXPosition newX) ||> updateNodeAndReferencedEdges graph))
 
-        // TODO
-        let crossingMinimisation (graph: DiscoveredGraph) =
-            graph
+        // Crossing minimisation according to Gansner et al. (1993), with changes constrained by global order (Mennens 2019)
+        let crossingMinimisation maxIterations (graph: DiscoveredGraph) =
+
+            let wmedian topDown (graph: DiscoveredGraph) =
+
+                /// Calculate the median X position of nodes on a given rank that are adjacent to the given node (Gansner et al. 1993)
+                let medianValue node adjRank (graph: DiscoveredGraph) =
+                    let p =
+                        graph.Nodes
+                        |> List.filter (fun n -> (getPosition n).Y = adjRank && graph.Edges |> List.exists (fun (a, b) -> a = node && b = n))
+                        |> List.map (fun n -> (getPosition n).X)
+                    let m = p.Length / 2
+                    if p.Length = 0 then -1f
+                    else if p.Length % 2 = 1 then p[m]
+                    else if p.Length = 2 then (p[0] + p[1]) / 2f
+                    else
+                        let left = p[m - 1] - p[0]
+                        let right = p[p.Length - 1] - p[m]
+                        (p[m - 1] * right + p[m] * left) / (left + right)
+
+                /// Take a list of ordered nodes and split them into a new partition whenever encountering a constrained node, not including those.
+                let rec groupUnconstrainedNodes (state: GraphNode list list) nodes =
+                    match nodes with
+                    | [] -> state |> List.filter (fun l -> not l.IsEmpty) |> List.rev
+                    | head :: tail ->
+                        match head with
+                        | UnconstrainedVirtual _ -> tail |> groupUnconstrainedNodes (state |> List.updateAt 0 (state[0] @ [head]))
+                        | _ -> tail |> groupUnconstrainedNodes (if state.Head.IsEmpty then state else state |> List.insertAt 0 [])
+
+                let groupedByRank = graph.Nodes |> List.groupBy (fun n -> (getPosition n).Y) |> fun g -> if topDown then g |> List.sortBy fst else g |> List.sortByDescending fst
+                (graph, groupedByRank) ||> List.fold (fun graph (rank, nodes) ->
+                    let groupedByConstrainment = nodes |> List.sortBy (fun n -> (getPosition n).X) |> groupUnconstrainedNodes [[]]
+                    (graph, groupedByConstrainment) ||> List.fold (fun graph group ->
+                        let sortedByMedian = group |> List.map (fun n -> n, medianValue n (if topDown then rank - 1 else rank + 1) graph) |> List.sortBy snd |> List.map fst // TODO: Gansner flips order of equal values every second iteration!
+                        let updatedNodes = sortedByMedian |> List.mapi (fun i n -> n |> updateXPosition (getPosition(group[i]).X)) // Assume X position of original node in that order slot
+                        (graph, updatedNodes |> List.indexed) ||> List.fold (fun graph (i, node) -> updateNodeAndReferencedEdges graph sortedByMedian[i] node))) // Update the graph with the new positions
+
+            let transpose (graph: DiscoveredGraph) =
+                graph
+
+            (graph, [0 .. maxIterations]) ||> List.fold (fun graph iter ->
+                let graph = graph |> wmedian (iter % 2 = 0) |> transpose
+                // TODO: replace new version if there are less crossings
+                graph)
 
         let sequenceNodes =
             goNsg.Nodes
@@ -853,7 +894,7 @@ module internal GraphLayoutAlgo =
                 | graph, false -> graph |> addUnconstrainedEdge a b edge
             | false -> graph |> addUnconstrainedEdge a b edge)
 
-        graph |> removeUnusedNodes |> closeGaps |> spreadAndSortUnconstrainedNodes |> crossingMinimisation
+        graph |> removeUnusedNodes |> closeGaps |> spreadAndSortUnconstrainedNodes |> crossingMinimisation maxIterations
 
     /// Minimize edge crossings for a discovered model
     let internal minimizeEdgeCrossings goNsg skeleton model =
