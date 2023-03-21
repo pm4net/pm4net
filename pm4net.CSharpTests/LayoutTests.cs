@@ -6,11 +6,11 @@ namespace pm4net.CSharpTests
     public class LayoutTests
     {
         [Fact]
-        public void CanFindGlobalOrderFromLog()
+        public void CanFindGlobalRankGraphFromLog()
         {
             var json = File.ReadAllText("github_pm4py.jsonocel");
             var log = OcelJson.Deserialize(json, false);
-            var globalOrder = StableGraphLayout.ComputeGlobalOrder(log);
+            var globalOrder = StableGraphLayout.ComputeRankGraph(log);
             Assert.NotNull(globalOrder);
         }
     }

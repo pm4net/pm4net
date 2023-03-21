@@ -6,6 +6,7 @@ open System.IO
 open System.Collections.Generic
 open pm4net.Types.GraphLayout
 open pm4net.Algorithms.Layout
+open pm4net.Visualization.Layout
 
 module Assertions =
 
@@ -34,31 +35,69 @@ module Assertions =
 module ``Stable graph layout tests`` =
 
     [<Fact>]
-    let ``Can discover global order from Blazor log`` () =
+    let ``Can discover global rank graph from Blazor log`` () =
         let json = File.ReadAllText("blazor-logs.jsonocel")
         let log = OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
-        let globalOrder = StableGraphLayout.ComputeGlobalOrder log
-        globalOrder |> Assert.NotNull
+        let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let dot = LayoutStepsVisualizer.globalRankGraphToDot rankGraph
+        rankGraph |> Assert.NotNull
 
     [<Fact>]
-    let ``Can discover global order from 'GitHub pm4py' log`` () =
+    let ``Can discover global rank graph from 'GitHub pm4py' log`` () =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
-        let globalOrder = StableGraphLayout.ComputeGlobalOrder log
-        globalOrder |> Assert.NotNull
+        let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let dot = LayoutStepsVisualizer.globalRankGraphToDot rankGraph
+        rankGraph |> Assert.NotNull
 
     [<Fact>]
-    let ``Can discover global order from 'recruiting' log`` () =
+    let ``Can discover global rank graph from 'recruiting' log`` () =
         let json = File.ReadAllText("recruiting.jsonocel")
         let log = OcelJson.deserialize true json
-        let globalOrder = StableGraphLayout.ComputeGlobalOrder log
-        globalOrder |> Assert.NotNull
+        let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let dot = LayoutStepsVisualizer.globalRankGraphToDot rankGraph
+        rankGraph |> Assert.NotNull
+
+    [<Fact>]
+    let ``Can discover global order from Blazor log and discovered DFG`` () =
+        let json = File.ReadAllText("blazor-logs.jsonocel")
+        let log = OcelJson.deserialize true json
+        let log = log.MergeDuplicateObjects()
+        let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["CorrelationId"], log)
+
+        // For printing NSG with DOT (only works with neato or fdp layout)
+        let (rankGraph, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
+        let nsg = (rankGraph, skeleton) ||> GraphLayoutAlgo.computeNodeSequenceGraph
+        let dotRg = LayoutStepsVisualizer.globalRankGraphToDot rankGraph
+        let dotNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
+        let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
+        let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
+
+        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true)
+        let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
+
+        //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
+        discoveredGraph |> Assert.NotNull
 
     [<Fact>]
     let ``Can discover global order from 'GitHub pm4py' log and discovered DFG`` () =
-        let json = File.ReadAllText("blazor-logs.jsonocel")
+        let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
-        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["CorrelationId"], log)
-        let globalOrder = StableGraphLayout.ComputeGlobalOrder(log, dfg)
-        globalOrder |> Assert.NotNull
+        //let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["case:concept:name"], log)
+        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
+        let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
+
+        // For printing NSG with DOT (only works with neato or fdp layout)
+        let (rankGraph, _) =  (rankGraph, components, dfg) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
+        let nsg = (rankGraph, skeleton) ||> GraphLayoutAlgo.computeNodeSequenceGraph
+        let dotNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
+        let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
+        let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
+
+        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true)
+        let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
+
+        //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
+        discoveredGraph |> Assert.NotNull
