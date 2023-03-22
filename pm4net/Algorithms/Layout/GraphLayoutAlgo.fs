@@ -726,16 +726,17 @@ module internal GraphLayoutAlgo =
         // Crossing minimisation according to Gansner et al. (1993), with changes constrained by global order (Mennens 2019)
         let crossingMinimisation maxIterations (graph: DiscoveredGraph) =
 
-            /// Check whether a point is right of a line defined by two points. From: https://stackoverflow.com/a/3461533/2102106
-            let isRightOfLine (p1: Position) (p2: Position) (point: Position) =
-                ((p2.X - p1.X) * float32(point.Y - p1.Y) - float32(p2.Y - p1.Y) * (point.X - p1.X)) > 0f
-
-            /// Make sure that an edge points towards the right (or vertical)
-            let pointEdgeRight (a: Position) (b: Position) =
-                if a.X > b.X then b, a else a, b
-
             /// Counts the number of edge crossings in a graph
             let countEdgeCrossings (graph: DiscoveredGraph) =
+
+                /// Check whether a point is right of a line defined by two points. From: https://stackoverflow.com/a/3461533/2102106
+                let isRightOfLine (p1: Position) (p2: Position) (point: Position) =
+                    ((p2.X - p1.X) * float32(point.Y - p1.Y) - float32(p2.Y - p1.Y) * (point.X - p1.X)) > 0f
+
+                /// Make sure that an edge points towards the right (or vertical)
+                let pointEdgeRight (a: Position) (b: Position) =
+                    if a.X > b.X then b, a else a, b
+
                 graph.Edges |> List.sumBy (fun (a, b) ->
                     let posA, posB = getPosition a, getPosition b
                     graph.Edges
@@ -758,6 +759,16 @@ module internal GraphLayoutAlgo =
                             | _ -> false)
                     |> List.length)
 
+            /// Take a list of ordered nodes and split them into a new partition whenever encountering a constrained node, not including those.
+            let rec groupUnconstrainedNodes (state: GraphNode list list) nodes =
+                match nodes with
+                | [] -> state |> List.filter (fun l -> not l.IsEmpty) |> List.rev
+                | head :: tail ->
+                    match head with
+                    | UnconstrainedVirtual _ -> tail |> groupUnconstrainedNodes (state |> List.updateAt 0 (state[0] @ [head]))
+                    | _ -> tail |> groupUnconstrainedNodes (if state.Head.IsEmpty then state else state |> List.insertAt 0 [])
+
+            /// Sort unconstrained nodes on each rank via median position value of adjacent nodes
             let wmedian topDown (graph: DiscoveredGraph) =
 
                 /// Calculate the median X position of nodes on a given rank that are adjacent to the given node (Gansner et al. 1993)
@@ -775,15 +786,6 @@ module internal GraphLayoutAlgo =
                         let right = p[p.Length - 1] - p[m]
                         (p[m - 1] * right + p[m] * left) / (left + right)
 
-                /// Take a list of ordered nodes and split them into a new partition whenever encountering a constrained node, not including those.
-                let rec groupUnconstrainedNodes (state: GraphNode list list) nodes =
-                    match nodes with
-                    | [] -> state |> List.filter (fun l -> not l.IsEmpty) |> List.rev
-                    | head :: tail ->
-                        match head with
-                        | UnconstrainedVirtual _ -> tail |> groupUnconstrainedNodes (state |> List.updateAt 0 (state[0] @ [head]))
-                        | _ -> tail |> groupUnconstrainedNodes (if state.Head.IsEmpty then state else state |> List.insertAt 0 [])
-
                 let groupedByRank = graph.Nodes |> List.groupBy (fun n -> (getPosition n).Y) |> fun g -> if topDown then g |> List.sortBy fst else g |> List.sortByDescending fst
                 (graph, groupedByRank) ||> List.fold (fun graph (rank, nodes) ->
                     let groupedByConstrainment = nodes |> List.sortBy (fun n -> (getPosition n).X) |> groupUnconstrainedNodes [[]]
@@ -792,13 +794,25 @@ module internal GraphLayoutAlgo =
                         let updatedNodes = sortedByMedian |> List.mapi (fun i n -> n |> updateXPosition (getPosition(group[i]).X)) // Assume X position of original node in that order slot
                         (graph, updatedNodes |> List.indexed) ||> List.fold (fun graph (i, node) -> updateNodeAndReferencedEdges graph sortedByMedian[i] node))) // Update the graph with the new positions
 
+            /// For every pair of unconstrained nodes, try to swap them and check whether that reduces the number of crossings
             let transpose (graph: DiscoveredGraph) =
+                let groupedbyRank = graph.Nodes |> List.groupBy (fun n -> (getPosition n).Y) |> List.sortBy fst
+                // TODO: Implement
                 graph
 
-            ((graph, countEdgeCrossings graph), [0 .. maxIterations - 1]) ||> List.fold (fun (graph, noOfCrossings) iter ->
-                let newGraph = graph |> wmedian (iter % 2 = 0) |> transpose
+            /// Try to minimize crossings repeatedly by checking whether an attempt significanlty reduced crossings, and trying to optimize it further if it did.
+            let rec minimizeRepeatedly previousCrossings currentIteration maxIterations graph =
+                if currentIteration = maxIterations then graph else
+                let newGraph = graph |> wmedian (currentIteration % 2 = 0) |> transpose
                 let newNoOfCrossings = countEdgeCrossings newGraph
-                if newNoOfCrossings < noOfCrossings then graph, newNoOfCrossings else graph, noOfCrossings) |> fst
+                if newNoOfCrossings < previousCrossings then
+                    let improvInPercent = (float32(previousCrossings) - float32(newNoOfCrossings)) / float32(previousCrossings) * 100f
+                    if improvInPercent > 1f then
+                        minimizeRepeatedly newNoOfCrossings (currentIteration + 1) maxIterations newGraph
+                    else newGraph
+                else graph
+
+            graph |> minimizeRepeatedly (countEdgeCrossings graph) 0 maxIterations
 
         let sequenceNodes =
             goNsg.Nodes
