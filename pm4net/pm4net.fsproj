@@ -49,4 +49,10 @@
     <PackageReference Update="FSharp.Core" Version="7.0.200" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+    <PackageReference Include="Snork.TextWrap">
+      <Version>1.0.1301</Version>
+    </PackageReference>
+  </ItemGroup>
+
 </Project>

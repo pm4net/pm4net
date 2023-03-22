@@ -44,13 +44,6 @@ type GraphNode =
     | UnconstrainedVirtual of Position: Position * Connection
 type DiscoveredGraph = DirectedGraph<GraphNode>
 
-/// Types for the crossing minimisation when non-sequence edges are also added to the NSG, but in an unconstrained fashion
-type CrossMinNode =
-    | Sequence of X: int * Node: SequenceNode
-    | NonSequence of Rank: int * A: string * B: string
-type CrossMinNsg = DirectedGraph<CrossMinNode, bool> // Boolean on edges indicate whether edge is constrained or unconstrained
-type CrossMinNsgWithPos = DirectedGraph<float32 * CrossMinNode, bool>
-
 /// Type to represent a variation of a trace, with all its events, a sequence of nodes and edges, and the frequency of the variation
 type internal Variation<'a, 'b> = {
     Events: 'a list
@@ -62,14 +55,23 @@ type internal Variation<'a, 'b> = {
 
 /// A point in a coordinate system
 type Coordinate = {
-    X: int
-    Y: int
+    X: float32
+    Y: float32
+}
+
+type Size = {
+    Width: int
+    Height: int
 }
 
 /// A node within a directed graph that has an associated name and X,Y position (origin in top-left).
 type Node = {
-    Name: string
+    Id: string
+    Text: string list
+    Type: string
     Position: Coordinate
+    Size: Size
+    Rank: int
 }
 
 /// A path between two nodes with several waypoints which the edge should go through.

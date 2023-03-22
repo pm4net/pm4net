@@ -7,6 +7,11 @@ open pm4net.Types.GraphLayout
 /// An implementation of the "stable graph layout algorithm for processes" introduced by Mennens 2019 (https://doi.org/10.1111/cgf.13723), implemented by Johannes Mols.
 module internal GraphLayoutAlgo =
 
+    /// Compare floats with a tolerance of 0.001
+    let private (=~) a b =
+        let diff = abs(a - b)
+        diff <= 0.001f || diff <= (max (abs(a)) (abs(b))) * 0.001f
+
     /// Update a node's rank in a rank graph, changing the edges that reference the nodes with it
     let private updateNode (rankGraph: GlobalRankGraph) node newRank =
         let nodeIdx = rankGraph.Nodes |> List.findIndex (fun n -> fst n = node)
@@ -215,6 +220,12 @@ module internal GraphLayoutAlgo =
         | EventNode node -> node.Name
         | StartNode objType -> Constants.objectTypeStartNode + objType
         | EndNode objType -> Constants.objectTypeEndNode + objType
+
+    /// Extract the position value from any of the node types
+    let private getPosition = function
+        | ConstrainedReal(pos, _, _)
+        | ConstrainedVirtual(pos, _)
+        | UnconstrainedVirtual(pos, _) -> pos
 
     /// Sort traces based on their importance (sum of w^2 * |v|^2)
     let internal importanceSort variation =
@@ -606,12 +617,6 @@ module internal GraphLayoutAlgo =
         let findNode (graph: DiscoveredGraph) name =
             graph.Nodes |> List.find (fun n -> match n with | ConstrainedReal(_, _, n) -> n = name | _ -> false)
 
-        /// Extract the position value from any of the node types
-        let getPosition = function
-            | ConstrainedReal(pos, _, _)
-            | ConstrainedVirtual(pos, _)
-            | UnconstrainedVirtual(pos, _) -> pos
-
         /// Remove any nodes that are not referenced by any edges
         let removeUnusedNodes (graph: DiscoveredGraph) =
             { graph with Nodes = graph.Nodes |> List.filter (fun n -> graph.Edges |> List.exists (fun (a, b) -> a = n || b = n)) }
@@ -941,3 +946,102 @@ module internal GraphLayoutAlgo =
             | false -> graph |> addUnconstrainedEdge a b edge)
 
         graph |> removeUnusedNodes |> closeGaps |> spreadAndSortUnconstrainedNodes |> crossingMinimisation maxIterations
+
+    /// Compute node positions for the real nodes, and adjust virtual nodes to make place. Virtual nodes are also aligned vertically so that chains preferably form straight lines
+    let internal computeNodePositions maxCharsPerLine nodesep ranksep edgesep (graph: DiscoveredGraph) =
+
+        /// Wrap a long text into multiple lines with a given limit of how long one line may be
+        let wrapText limit (text: string) =
+            let words = text.Split(' ')
+            ([], words) ||> Array.fold (fun lines word ->
+                match lines with
+                | [] -> [word]
+                | _ ->
+                    let updatedLine = $"{lines.Head} {words}"
+                    if updatedLine.Length > limit then
+                        word :: lines
+                    else
+                        lines |> List.updateAt 0 updatedLine
+            ) |> List.rev
+
+        /// Compute the node's properties, such as text, type, and size.
+        let computeNodeProperties = function
+            | ConstrainedReal(pos, _, name) ->
+                let node = { Id = name; Text = []; Type = ""; Position = { X = pos.X; Y = pos.Y |> float32 }; Size = { Width = 0; Height = 0 }; Rank = pos.Y }
+                let node =
+                    if name.StartsWith Constants.objectTypeStartNode then
+                        { node with
+                            Text = name.Remove(0, Constants.objectTypeStartNode.Length) |> wrapText maxCharsPerLine
+                            Type = "Start" }
+                    else if name.StartsWith Constants.objectTypeEndNode then
+                        { node with
+                            Text = name.Remove(0, Constants.objectTypeEndNode.Length) |> wrapText maxCharsPerLine
+                            Type = "End" }
+                    else
+                        { node with
+                            Text = name |> wrapText maxCharsPerLine
+                            Type = "Event" }
+
+                Some { node with Size = { Width = maxCharsPerLine; Height = node.Text.Length } }
+            | _ -> None
+
+        /// Calculate the vertical center of a rank based on the previous rank and the tallest node in the current rank.
+        let findVerticalCenterOfRank rank currentRankHeight nodes =
+            nodes
+            |> List.filter (fun n -> n.Rank = rank)
+            |> fun n ->
+                match n with
+                | [] -> currentRankHeight / 2f
+                | _ -> n |> List.maxBy (fun n -> n.Size.Height) |> fun n -> float32(n.Size.Height) / 2f + ranksep - (currentRankHeight / 2f)
+
+        let nodes =
+            graph.Nodes
+            |> List.groupBy (fun n -> (getPosition n).Y)
+            |> List.sortBy fst
+            |> List.fold (fun state (rank, nodes) ->
+                let converted = nodes |> List.choose (fun n -> match computeNodeProperties n with | Some node -> Some(n, node) | _ -> None)
+                let verticalRankCenter = (converted |> List.map snd) |> findVerticalCenterOfRank (rank - 1) (converted |> List.maxBy (fun (_, n) -> n.Size.Height) |> fun (_, n) -> n.Size.Height |> float32)
+
+                // TODO: Now place nodes with this vertical center
+
+                let backboneNodeIdx = nodes |> List.tryFindIndex (fun n -> (getPosition n).X = 0f)
+                let (left, right) = nodes |> (fun n -> match backboneNodeIdx with | Some idx -> n |> List.removeAt idx | _ -> n) |> List.partition (fun n -> (getPosition n).X < 0f)
+                match backboneNodeIdx with
+                | Some idx ->
+                    // Place the backbone node centrally and then add nodes left and right
+                    match computeNodeProperties nodes[idx] with
+                    | Some backboneNode ->
+                        backboneNode :: state
+                    | None -> failwith "Virtual nodes are not allowed on the backbone."
+                | _ ->
+                    // Place left and right nodes near the backbone, with half a nodesep on each side to the nearest node
+                    []
+
+                (*let convNodes = nodes |> List.map computeNodeProperties |> List.choose id
+
+                let rankYpos = // Get the Y position on which all nodes on this rank need to be centered on
+                    match rank with
+                    | 0 -> 0f
+                    | _ ->
+                        match state |> List.tryFind (fun n -> n.Position.Y = float32(rank - 1)) with
+                        | Some n -> n.Position.Y + ranksep
+                        | _ -> 0f
+
+            []*)) []: Node list
+
+            (*|> List.collect (fun (rank , nodes) ->
+                let convNodes = nodes |> List.map computeNodeProperties |> List.choose id
+                let backboneNode = nodes |> List.tryFind (fun n -> (getPosition n).X = 0f)
+                match backboneNode with
+                | Some bn ->
+                    match computeNodeProperties bn with
+                    | Some convBn ->
+                        let convBn =
+                            match rank with
+                            | 0 -> convBn
+                            | _ -> convBn // Adjust position to fulfill ranksep constraint
+                        []
+                    | None -> failwith "Virtual nodes are not allowed on the backbone."
+                | None -> [])*)
+
+        graph

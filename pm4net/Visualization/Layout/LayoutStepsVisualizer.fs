@@ -164,39 +164,3 @@ type LayoutStepsVisualizer private () =
         let sb = sb |> addEdges graph.Edges
         let sb = sb.AppendLine "}"
         sb.ToString()
-
-    /// Only works with Neato or Fdp layout engine
-    static member crossMinGraphToDot (crossMinNsg: CrossMinNsgWithPos) =
-
-        let getAttrString (x: float32) rank color posColor =
-            let xStr = x.ToString("0.00", CultureInfo.InvariantCulture)
-            $"""[label="" xlabel=<<font color="{posColor}" point-size="6">{xStr}</font>> pos="{xStr},-{rank}!" style=filled fillcolor={color} shape=square width=0.1 color={color}]"""
-
-        let getId = function
-            | Sequence(_, n) ->
-                match n with
-                | Real(_, _, name) -> name
-                | Virtual(r, idx) -> $"{r}_{idx}"
-            | NonSequence(r, a, b) -> $"{r}_{a}_{b}"
-
-        let addNodes (nodes: (float32 * CrossMinNode) list) (sb: StringBuilder) =
-            (sb, nodes) ||> List.fold (fun sb (x, n) ->
-                let id = getId n
-                match n with
-                | Sequence(_, node) ->
-                    match node with
-                    | Real(rank, _, name) -> sb.AppendLine $""""{id}" {getAttrString x rank "black" "red"}"""
-                    | Virtual(rank, dIdx) -> sb.AppendLine $""""{id}" {getAttrString x rank "red" "red"}"""
-                | NonSequence(rank, a, b) -> sb.AppendLine $""""{id}" {getAttrString x rank "green" "green"}""")
-
-        let addEdges (edges: ((float32 * CrossMinNode) * (float32 * CrossMinNode) * bool) list) (sb: StringBuilder) =
-            (sb, edges) ||> List.fold (fun sb ((_, a), (_, b), _) ->
-                sb.AppendLine $""""{getId a}" -> "{getId b}" """)
-
-        let sb = StringBuilder()
-        let sb = sb.AppendLine "digraph dfg {"
-        let sb = sb |> addNodes crossMinNsg.Nodes
-        let sb = sb.AppendLine ""
-        let sb = sb |> addEdges crossMinNsg.Edges
-        let sb = sb.AppendLine "}"
-        sb.ToString()
