@@ -726,6 +726,38 @@ module internal GraphLayoutAlgo =
         // Crossing minimisation according to Gansner et al. (1993), with changes constrained by global order (Mennens 2019)
         let crossingMinimisation maxIterations (graph: DiscoveredGraph) =
 
+            /// Check whether a point is right of a line defined by two points. From: https://stackoverflow.com/a/3461533/2102106
+            let isRightOfLine (p1: Position) (p2: Position) (point: Position) =
+                ((p2.X - p1.X) * float32(point.Y - p1.Y) - float32(p2.Y - p1.Y) * (point.X - p1.X)) > 0f
+
+            /// Make sure that an edge points towards the right (or vertical)
+            let pointEdgeRight (a: Position) (b: Position) =
+                if a.X > b.X then b, a else a, b
+
+            /// Counts the number of edge crossings in a graph
+            let countEdgeCrossings (graph: DiscoveredGraph) =
+                graph.Edges |> List.sumBy (fun (a, b) ->
+                    let posA, posB = getPosition a, getPosition b
+                    graph.Edges
+                    |> List.filter (fun (c, d) ->
+                        if a = c && b = d then false
+                        else
+                            let posC, posD = getPosition c, getPosition d
+                            match posA.Y = posC.Y && posB.Y = posD.Y || posA.Y = posD.Y && posB.Y = posC.Y with
+                            | true ->
+                                // Edges that share the same start or end are not considered crossings
+                                if posA = posC || posA = posD || posB = posC || posB = posD then false
+                                else
+                                    // Edges should always point right to make it easier
+                                    let (posA, posB) = pointEdgeRight posA posB
+                                    let (posC, posD) = pointEdgeRight posC posD
+                                    // If A is below C, swap the two in order to ensure the left/right check works
+                                    let posA, posB, posC, posD = if posA.Y < posC.Y then posC, posD, posA, posB else posA, posB, posC, posD
+                                    // If the other edge is crossing, the start point is on the left and the end point is on the right of the edge
+                                    isRightOfLine posA posB posC |> not && isRightOfLine posA posB posD
+                            | _ -> false)
+                    |> List.length)
+
             let wmedian topDown (graph: DiscoveredGraph) =
 
                 /// Calculate the median X position of nodes on a given rank that are adjacent to the given node (Gansner et al. 1993)
@@ -763,10 +795,10 @@ module internal GraphLayoutAlgo =
             let transpose (graph: DiscoveredGraph) =
                 graph
 
-            (graph, [0 .. maxIterations]) ||> List.fold (fun graph iter ->
-                let graph = graph |> wmedian (iter % 2 = 0) |> transpose
-                // TODO: replace new version if there are less crossings
-                graph)
+            ((graph, countEdgeCrossings graph), [0 .. maxIterations - 1]) ||> List.fold (fun (graph, noOfCrossings) iter ->
+                let newGraph = graph |> wmedian (iter % 2 = 0) |> transpose
+                let newNoOfCrossings = countEdgeCrossings newGraph
+                if newNoOfCrossings < noOfCrossings then graph, newNoOfCrossings else graph, noOfCrossings) |> fst
 
         let sequenceNodes =
             goNsg.Nodes
