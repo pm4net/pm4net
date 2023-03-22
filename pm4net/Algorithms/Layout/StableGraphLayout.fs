@@ -118,7 +118,6 @@ type StableGraphLayout private() =
         let (rankGraph, _) = (rankGraph, components, discoveredModel) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
         let globalOrder = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let discoveredGraph = (globalOrder, skeleton, discoveredModel) |||> GraphLayoutAlgo.constructDiscoveredGraph mergeEdges maxIterations
-        //GraphLayoutAlgo.minimizeEdgeCrossings globalOrder skeleton discoveredModel //|> GraphLayoutAlgo.convertGlobalOrderToFriendlyFormat
         discoveredGraph
 
     /// Compute a global order for a global rank graph by the means of a discovered model that is a subgraph of the global rank graph.
