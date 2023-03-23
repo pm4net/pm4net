@@ -16,10 +16,16 @@ type Skeleton = (SequenceElement<string> * int) list list
 /// Connected nodes within a global rank graph
 type Components = Set<string> list
 
+type Connection = {
+    A: string
+    B: string
+    Weight: int
+}
+
 /// Types of nodes that can be found in a node sequence graph
 type SequenceNode =
     | Real of Rank: int * DiscoveryIndex: int * Name: string
-    | Virtual of Rank: int * DiscoveryIndex: int
+    | Virtual of Rank: int * DiscoveryIndex: int * Connection
 
 /// An undirected graph that represents the node sequence graph of a given rank graph and skeleton (data structure is technically directed, but use edges as two-way connections)
 type NodeSequenceGraph = DirectedGraph<SequenceNode>
@@ -32,15 +38,9 @@ type Position = {
     Y: int
 }
 
-type Connection = {
-    A: string
-    B: string
-    Weight: int
-}
-
 type GraphNode =
     | ConstrainedReal of Position: Position * DiscoveryIndex: int * Name: string
-    | ConstrainedVirtual of Position: Position * DiscoveryIndex: int
+    | ConstrainedVirtual of Position: Position * DiscoveryIndex: int * Connection
     | UnconstrainedVirtual of Position: Position * Connection
 type DiscoveredGraph = DirectedGraph<GraphNode>
 
@@ -78,6 +78,7 @@ type Node = {
 type EdgePath = {
     Edge: string * string
     Waypoints: Coordinate seq
+    Downwards: bool
 }
 
 /// A global order defines a collection of nodes and their position, as well as paths between nodes where non-straight edges are required.
@@ -85,3 +86,9 @@ type GlobalOrder = {
     Nodes: Node seq
     EdgePaths: EdgePath seq
 }
+
+// Helper types for the above
+
+type internal NodeOrCoordinate =
+    | InternalNode of Node
+    | InternalCoordinate of Coordinate

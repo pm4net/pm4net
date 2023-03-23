@@ -42,11 +42,11 @@ type LayoutStepsVisualizer private () =
 
         let getDiscoveryIndex = function
             | Real(_, idx, _)
-            | Virtual(_, idx) -> idx
+            | Virtual(_, idx, _) -> idx
 
         let getRank = function
             | Real(r, _, _)
-            | Virtual(r, _) -> r
+            | Virtual(r, _, _) -> r
 
         let getShape = function
             | Real _ -> "square"
@@ -54,7 +54,7 @@ type LayoutStepsVisualizer private () =
 
         let getId = function
             | Real(_, _, n) -> n
-            | Virtual(r, dIdx) -> $"{r}_{dIdx}"
+            | Virtual(r, dIdx, _) -> $"{r}_{dIdx}"
 
         let getNodesByRanks (nodes: SequenceNode list) =
             nodes |> List.groupBy (fun n -> getRank n)
@@ -87,11 +87,11 @@ type LayoutStepsVisualizer private () =
 
         let getDiscoveryIndex = function
             | Real(_, idx, _)
-            | Virtual(_, idx) -> idx
+            | Virtual(_, idx, _) -> idx
 
         let getRank = function
             | Real(r, _, _)
-            | Virtual(r, _) -> r
+            | Virtual(r, _, _) -> r
 
         let getShape = function
             | Real _ -> "square"
@@ -99,7 +99,7 @@ type LayoutStepsVisualizer private () =
 
         let getId = function
             | Real(_, _, n) -> n
-            | Virtual(r, dIdx) -> $"{r}_{dIdx}"
+            | Virtual(r, dIdx, _) -> $"{r}_{dIdx}"
 
         let getNodesByRanks (nodes: (int * SequenceNode) list) =
             nodes |> List.groupBy (fun (_, n) -> getRank n)
@@ -141,14 +141,14 @@ type LayoutStepsVisualizer private () =
 
         let getId = function
             | ConstrainedReal(_, _, name) -> name
-            | ConstrainedVirtual(pos, _) -> $"v {pos.X},{pos.Y}"
+            | ConstrainedVirtual(pos, _, _) -> $"v {pos.X},{pos.Y}"
             | UnconstrainedVirtual(pos, conn) -> $"uv {pos.X},{pos.Y} {conn.A}-{conn.B}"
 
         let addNodes (nodes: GraphNode list) (sb: StringBuilder) =
             (sb, nodes) ||> List.fold (fun sb node ->
                 match node with
                 | ConstrainedReal(pos, _, name) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="black" point-size="6">{getFloat pos.X},{pos.Y}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=square style=filled fillcolor="#fff2cc" width="0.1"]"""
-                | ConstrainedVirtual(pos, idx) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="red" point-size="6">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor="red" width="0.1"]"""
+                | ConstrainedVirtual(pos, idx, _) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="red" point-size="6">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor="red" width="0.1"]"""
                 | UnconstrainedVirtual(pos, conn) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="green" point-size="6">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor=green width="0.1"]""")
 
         let addEdges (edges: (GraphNode * GraphNode) list) (sb: StringBuilder) =

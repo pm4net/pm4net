@@ -200,13 +200,13 @@ module internal GraphLayoutAlgo =
     let private getRank elem =
         match elem with
         | Real(rank, _, _)
-        | Virtual(rank, _) -> rank
+        | Virtual(rank, _, _) -> rank
 
     /// Get the discovery index of a sequence node, real or virtual
     let private getDiscoveryIndex elem =
         match elem with
         | Real(_, idx, _)
-        | Virtual(_, idx) -> idx
+        | Virtual(_, idx, _) -> idx
 
     /// Get the name of a sequence node, if it is real
     let private getName elem =
@@ -224,8 +224,16 @@ module internal GraphLayoutAlgo =
     /// Extract the position value from any of the node types
     let private getPosition = function
         | ConstrainedReal(pos, _, _)
-        | ConstrainedVirtual(pos, _)
+        | ConstrainedVirtual(pos, _, _)
         | UnconstrainedVirtual(pos, _) -> pos
+
+    /// Extract the X position value from any of the node types
+    let private getXPosition node =
+        (getPosition node).X
+
+    /// Extract the Y position value from any of the node types
+    let private getYPosition node =
+        (getPosition node).Y
 
     /// Sort traces based on their importance (sum of w^2 * |v|^2)
     let internal importanceSort variation =
@@ -356,7 +364,7 @@ module internal GraphLayoutAlgo =
             nsg.Nodes |> List.tryFindIndex (fun n ->
                 match n with
                 | Real(r, idx, _) -> r = rank && idx = discoveryIndex
-                | Virtual(r, idx) -> r = rank && idx = discoveryIndex)
+                | Virtual(r, idx, _) -> r = rank && idx = discoveryIndex)
 
         /// Try to find a real node on a rank with a given name, disregarding the discovery index
         let tryFindRealNodeOnRank (nsg: NodeSequenceGraph) rank name =
@@ -366,14 +374,14 @@ module internal GraphLayoutAlgo =
                 | _ -> false)
 
         /// Add a virtual node to the NSG, if there isn't already an existing node at this rank with the same discovery index
-        let addVirtualNodeIfNotExists nsg rank discoveryIndex =
-            let virtualNode = Virtual(rank, discoveryIndex)
+        let addVirtualNodeIfNotExists nsg rank discoveryIndex connection =
+            let virtualNode = Virtual(rank, discoveryIndex, connection)
             match tryFindNode nsg rank discoveryIndex with
             | Some nodeIndex -> nsg, nsg.Nodes[nodeIndex]
             | None -> { nsg with Nodes = virtualNode :: nsg.Nodes }, virtualNode
 
         /// Add a real node to the NSG, replacing any virtual nodes that may already be there. Also updates any edges that reference the replaced node.
-        let addOrReplaceRealNode nsg rank discoveryIndex name =
+        let addOrReplaceRealNode nsg rank discoveryIndex conn name =
             let newNode = Real(rank, discoveryIndex, name)
             match tryFindRealNodeOnRank nsg rank name with
             | Some foundNodeIdx ->
@@ -387,7 +395,7 @@ module internal GraphLayoutAlgo =
                     | Real _ -> nsg, nsg.Nodes[foundNodeIdx] // Don't modify the graph, return the found node
                     | Virtual _ ->
                         // Replace the virtual node with a real one, and update edges referencing it
-                        let updatedEdges = Virtual(rank, discoveryIndex) |> findEdgesWithNode nsg |> List.map (fun (i, (a, b)) -> i, if nsg.Nodes[foundNodeIdx] = a then (newNode, b) else (a, newNode))
+                        let updatedEdges = Virtual(rank, discoveryIndex, conn) |> findEdgesWithNode nsg |> List.map (fun (i, (a, b)) -> i, if nsg.Nodes[foundNodeIdx] = a then (newNode, b) else (a, newNode))
                         { nsg with
                             Nodes = nsg.Nodes |> List.updateAt foundNodeIdx newNode
                             Edges = (nsg.Edges, updatedEdges) ||> List.fold (fun edges (i, e) -> edges |> List.updateAt i e)
@@ -395,22 +403,22 @@ module internal GraphLayoutAlgo =
                 | None -> { nsg with Nodes = newNode :: nsg.Nodes }, newNode
 
         /// Add virtual nodes between two nodes on different ranks where required and other nodes don't already exist
-        let rec addVirtualNodesAndEdgesBetweenRanks (nsg: NodeSequenceGraph) rankA nodeA rankB discoveryIndex =
+        let rec addVirtualNodesAndEdgesBetweenRanks (nsg: NodeSequenceGraph) rankA nodeA rankB discoveryIndex conn =
             let upwards = rankA - rankB >= 0 // Whether the direction is upwards or downwards
             let nextRank = rankA + if upwards then -1 else 1 // The next rank to consider in the given direction
-            let nsg, nextNode = addVirtualNodeIfNotExists nsg nextRank discoveryIndex // Add a virtual node at the next rank, if necessary
+            let nsg, nextNode = addVirtualNodeIfNotExists nsg nextRank discoveryIndex conn // Add a virtual node at the next rank, if necessary
             let nsg, _ = addEdgeIfNotExists nsg nodeA nextNode // Add an edge between the current and the next rank, if necessary
 
             // When the next rank is already the desired destination, we only have to add an edge between the current rank and the destination
             match nextRank = rankB with
-            | false -> addVirtualNodesAndEdgesBetweenRanks nsg nextRank nextNode rankB discoveryIndex // Recursively add virtual nodes and edges until done
+            | false -> addVirtualNodesAndEdgesBetweenRanks nsg nextRank nextNode rankB discoveryIndex conn // Recursively add virtual nodes and edges until done
             | _ -> nsg, nextNode // All done!
 
         (({ Nodes = []; Edges = [] }: DirectedGraph<_>), skeleton |> List.indexed) ||> List.fold (fun nsg (idx, seq) ->
             let edges = seq |> List.filter (fun elem -> match elem with | Edge _, _ -> true | _ -> false)
             (nsg, edges) ||> List.fold (fun nsg edge ->
                 match edge with
-                | Edge (a, b), _ ->
+                | Edge (a, b), freq ->
                     /// Get the rank of a node with a given name
                     let rankOfNode (rankGraph: GlobalRankGraph) node =
                         rankGraph.Nodes |> List.find (fun n -> fst n = node) |> snd
@@ -418,9 +426,12 @@ module internal GraphLayoutAlgo =
                     // Find the ranks of A and B in the global rank graph
                     let rankA, rankB = rankOfNode rankGraph a, rankOfNode rankGraph b
 
+                    // Add the connection information
+                    let conn = { A = a; B = b; Weight = freq }
+
                     // Add the real nodes of the edge origin and destination if they don't already exist, or replace
-                    let nsg, nodeA = addOrReplaceRealNode nsg rankA idx a
-                    let nsg, nodeB = addOrReplaceRealNode nsg rankB idx b
+                    let nsg, nodeA = addOrReplaceRealNode nsg rankA idx conn a
+                    let nsg, nodeB = addOrReplaceRealNode nsg rankB idx conn b
 
                     // Determine whether the target node is in the same "column", i.e. has the same discovery index. If not, the last edge must merge the connection
                     let targetA, targetB = getDiscoveryIndex nodeA, getDiscoveryIndex nodeB
@@ -430,10 +441,10 @@ module internal GraphLayoutAlgo =
                     | 1 -> addEdgeIfNotExists nsg nodeA nodeB |> fst
                     | _ ->
                         match targetA = targetB with
-                        | true -> addVirtualNodesAndEdgesBetweenRanks nsg rankA nodeA rankB idx |> fst
+                        | true -> addVirtualNodesAndEdgesBetweenRanks nsg rankA nodeA rankB idx conn |> fst
                         | false ->
                             // Only add virtual nodes up to the rank just before the target, and then connect it to the actual target node via an edge
-                            let nsg, nodeToConnect = addVirtualNodesAndEdgesBetweenRanks nsg rankA nodeA (if rankA - rankB >= 0 then rankB + 1 else rankB - 1) idx
+                            let nsg, nodeToConnect = addVirtualNodesAndEdgesBetweenRanks nsg rankA nodeA (if rankA - rankB >= 0 then rankB + 1 else rankB - 1) idx conn
                             addEdgeIfNotExists nsg nodeToConnect nodeB |> fst
                 | _ -> nsg))
 
@@ -447,7 +458,7 @@ module internal GraphLayoutAlgo =
             |> List.filter (fun n ->
                 match n with
                 | Real(_, idx, _)
-                | Virtual(_, idx) -> idx = nodeDiscoveryIdx)
+                | Virtual(_, idx, _) -> idx = nodeDiscoveryIdx)
             |> List.sortBy (fun n -> getRank n)
 
         /// Compute the sequence connectedness of two sequences (Definition 4.2.4 of Mennens 2018)
@@ -611,7 +622,7 @@ module internal GraphLayoutAlgo =
 
     /// Construct the actual discovered graph by applying the discovered model to the global order, minimising edge crossings as the graph is discovered.
     /// Edges that are identical in its origin and destination can be merged together in order to avoid multiple edges in the resulting graph.
-    let internal constructDiscoveredGraph mergeEdges maxIterations (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
+    let internal constructDiscoveredGraph mergeEdges (goNsg: GlobalOrderNodeSequenceGraph) (skeleton: Skeleton) (model: DirectedGraph<Graphs.Node, Graphs.Edge>) =
 
         /// Find a real constrained node by its normal node counterpart
         let findNode (graph: DiscoveredGraph) name =
@@ -633,7 +644,7 @@ module internal GraphLayoutAlgo =
         /// Update the X position of some graph node, keeping all other values the same
         let updateXPosition x = function
             | ConstrainedReal(pos, idx, name) -> ConstrainedReal({ X = x; Y = pos.Y}, idx, name)
-            | ConstrainedVirtual(pos, idx) -> ConstrainedVirtual({ X = x; Y = pos.Y}, idx)
+            | ConstrainedVirtual(pos, idx, conn) -> ConstrainedVirtual({ X = x; Y = pos.Y}, idx, conn)
             | UnconstrainedVirtual(pos, conn) -> UnconstrainedVirtual({ X = x; Y = pos.Y }, conn)
 
         /// Close any gaps created by filtering out certain real/virtual nodes
@@ -658,7 +669,7 @@ module internal GraphLayoutAlgo =
                         match closestExisting with
                         | [] -> graph
                         | _ ->
-                            let closest = closestExisting |> List.maxBy (fun n -> if left then -(getPosition n).X else (getPosition n).X)
+                            let closest = closestExisting |> List.maxBy (fun n -> if left then -(getXPosition n) else getXPosition n)
                             let proposedXPos =
                                 match node, closest with
                                 | ConstrainedReal _, ConstrainedReal _
@@ -674,22 +685,22 @@ module internal GraphLayoutAlgo =
                                 match node with
                                 | ConstrainedReal _
                                 | ConstrainedVirtual _ ->
-                                    let existingNode = graph.Nodes |> List.tryFind (fun n -> proposedXPos = (getPosition n).X && (getPosition n).Y = rank)
+                                    let existingNode = graph.Nodes |> List.tryFind (fun n -> proposedXPos = getXPosition n && getYPosition n = rank)
                                     match existingNode with
                                     | Some _ -> graph // There is already a node here, so we cannot move it
                                     | None -> (node, node |> updateXPosition proposedXPos) ||> updateNodeAndReferencedEdges graph // Move the node and update all the edges that reference it
                                 | UnconstrainedVirtual _ ->
                                     let collisionCheckX = if left then ceil(pos.X) else floor(pos.X)
-                                    let existingNode = graph.Nodes |> List.tryFind (fun n -> collisionCheckX = (getPosition n).X && (getPosition n).Y = rank)
+                                    let existingNode = graph.Nodes |> List.tryFind (fun n -> collisionCheckX = getXPosition n && getYPosition n = rank)
                                     match existingNode with
                                     | Some _ -> graph // There is already a constrained node in the way, so moving it is not allowed
                                     | None -> (node, node |> updateXPosition proposedXPos) ||> updateNodeAndReferencedEdges graph) // Move the unconstrained node closer to the backbone
                         
             /// Split a list of nodes based on a condition of the X position, and then sort it by X ascendingly
             let splitByCondition cond nodes =
-                nodes |> List.filter (fun n -> (getPosition n).X |> cond) |> List.sortBy (fun n -> (getPosition n).X)
+                nodes |> List.filter (fun n -> getXPosition n |> cond) |> List.sortBy (fun n -> getXPosition n)
 
-            (graph, graph.Nodes |> List.groupBy (fun n -> (getPosition n).Y) |> List.sortBy fst) ||> List.fold (fun graph (rank, nodes) ->
+            (graph, graph.Nodes |> List.groupBy getYPosition |> List.sortBy fst) ||> List.fold (fun graph (rank, nodes) ->
                 let leftOfBackbone = nodes |> splitByCondition (fun x -> x < 0f)
                 let rightOfBackbone = nodes |> splitByCondition (fun x -> x > 0f)
                 let graph = moveIfPossible graph leftOfBackbone true rank
@@ -729,7 +740,7 @@ module internal GraphLayoutAlgo =
                         (node, node |> updateXPosition newX) ||> updateNodeAndReferencedEdges graph))
 
         // Crossing minimisation according to Gansner et al. (1993), with changes constrained by global order (Mennens 2019)
-        let crossingMinimisation maxIterations (graph: DiscoveredGraph) =
+        let crossingMinimisation (graph: DiscoveredGraph) =
 
             /// Counts the number of edge crossings in a graph
             let countEdgeCrossings (graph: DiscoveredGraph) =
@@ -780,8 +791,8 @@ module internal GraphLayoutAlgo =
                 let medianValue node adjRank (graph: DiscoveredGraph) =
                     let p =
                         graph.Nodes
-                        |> List.filter (fun n -> (getPosition n).Y = adjRank && graph.Edges |> List.exists (fun (a, b) -> a = node && b = n))
-                        |> List.map (fun n -> (getPosition n).X)
+                        |> List.filter (fun n -> getYPosition n = adjRank && graph.Edges |> List.exists (fun (a, b) -> a = node && b = n))
+                        |> List.map getXPosition
                     let m = p.Length / 2
                     if p.Length = 0 then -1f
                     else if p.Length % 2 = 1 then p[m]
@@ -791,9 +802,9 @@ module internal GraphLayoutAlgo =
                         let right = p[p.Length - 1] - p[m]
                         (p[m - 1] * right + p[m] * left) / (left + right)
 
-                let groupedByRank = graph.Nodes |> List.groupBy (fun n -> (getPosition n).Y) |> fun g -> if topDown then g |> List.sortBy fst else g |> List.sortByDescending fst
+                let groupedByRank = graph.Nodes |> List.groupBy getYPosition |> fun g -> if topDown then g |> List.sortBy fst else g |> List.sortByDescending fst
                 (graph, groupedByRank) ||> List.fold (fun graph (rank, nodes) ->
-                    let groupedByConstrainment = nodes |> List.sortBy (fun n -> (getPosition n).X) |> groupUnconstrainedNodes [[]]
+                    let groupedByConstrainment = nodes |> List.sortBy getXPosition |> groupUnconstrainedNodes [[]]
                     (graph, groupedByConstrainment) ||> List.fold (fun graph group ->
                         let sortedByMedian = group |> List.map (fun n -> n, medianValue n (if topDown then rank - 1 else rank + 1) graph) |> List.sortBy snd |> List.map fst // TODO: Gansner flips order of equal values every second iteration!
                         let updatedNodes = sortedByMedian |> List.mapi (fun i n -> n |> updateXPosition (getPosition(group[i]).X)) // Assume X position of original node in that order slot
@@ -801,23 +812,22 @@ module internal GraphLayoutAlgo =
 
             /// For every pair of unconstrained nodes, try to swap them and check whether that reduces the number of crossings
             let transpose (graph: DiscoveredGraph) =
-                let groupedbyRank = graph.Nodes |> List.groupBy (fun n -> (getPosition n).Y) |> List.sortBy fst
+                let groupedbyRank = graph.Nodes |> List.groupBy getYPosition |> List.sortBy fst
                 // TODO: Implement
                 graph
 
             /// Try to minimize crossings repeatedly by checking whether an attempt significanlty reduced crossings, and trying to optimize it further if it did.
-            let rec minimizeRepeatedly previousCrossings currentIteration maxIterations graph =
-                if currentIteration = maxIterations then graph else
+            let rec minimizeRepeatedly previousCrossings currentIteration graph =
                 let newGraph = graph |> wmedian (currentIteration % 2 = 0) |> transpose
                 let newNoOfCrossings = countEdgeCrossings newGraph
                 if newNoOfCrossings < previousCrossings then
                     let improvInPercent = (float32(previousCrossings) - float32(newNoOfCrossings)) / float32(previousCrossings) * 100f
                     if improvInPercent > 1f then
-                        minimizeRepeatedly newNoOfCrossings (currentIteration + 1) maxIterations newGraph
+                        minimizeRepeatedly newNoOfCrossings (currentIteration + 1) newGraph
                     else newGraph
                 else graph
 
-            graph |> minimizeRepeatedly (countEdgeCrossings graph) 0 maxIterations
+            graph |> minimizeRepeatedly (countEdgeCrossings graph) 0
 
         let sequenceNodes =
             goNsg.Nodes
@@ -829,7 +839,7 @@ module internal GraphLayoutAlgo =
             |> List.map (fun (x, n) ->
                 match n with
                 | Real(rank, idx, name) -> ConstrainedReal({ X = float32 x; Y = rank }, idx, name)
-                | Virtual(rank, idx) -> ConstrainedVirtual({ X = float32 x; Y = rank }, idx))
+                | Virtual(rank, idx, conn) -> ConstrainedVirtual({ X = float32 x; Y = rank }, idx, conn))
 
         // Merge edges with identical origin and destination if specified
         let edges =
@@ -847,9 +857,9 @@ module internal GraphLayoutAlgo =
             /// Find a node in the new graph from a sequence node
             let findNodeFromSeqNode (graph: DiscoveredGraph) = function
                 | Real(_, _, name) -> findNode graph name
-                | Virtual(rank, vIdx) -> graph.Nodes |> List.find (fun n ->
+                | Virtual(rank, vIdx, _) -> graph.Nodes |> List.find (fun n ->
                     match n with
-                    | ConstrainedVirtual(pos, idx) -> pos.Y = rank && vIdx = idx
+                    | ConstrainedVirtual(pos, idx, _) -> pos.Y = rank && vIdx = idx
                     | _ -> false) // Unconstrained virtual nodes not supported, since they are not yet present in the graph and cannot unqiuely identified by the given sequence node.
 
             /// Check whether an edge is constrained by checking whether it is present in the skeleton (not always accurate when it contains back-edges to previously encountered nodes)
@@ -886,7 +896,7 @@ module internal GraphLayoutAlgo =
                 goNsg.Nodes
                 |> List.filter (fun (_, n) -> // Get the possible starting points to start traversing the global order NSG
                     match n with
-                    | Virtual(_, idx) -> goNsg.Edges |> List.exists (fun ((_, tmpA), (_, tmpB)) ->
+                    | Virtual(_, idx, _) -> goNsg.Edges |> List.exists (fun ((_, tmpA), (_, tmpB)) ->
                         (a = tmpA && n = tmpB || a = tmpB && n = tmpA) && // Is there a virtual node that the start point is pointing to/from? (NSG is not directed)
                         (idx = discIdxA || idx = discIdxB)) // Does the virtual node have either the discovery index of A or B?
                     | _ -> false)
@@ -945,7 +955,7 @@ module internal GraphLayoutAlgo =
                 | graph, false -> graph |> addUnconstrainedEdge a b edge
             | false -> graph |> addUnconstrainedEdge a b edge)
 
-        graph |> removeUnusedNodes |> closeGaps |> spreadAndSortUnconstrainedNodes |> crossingMinimisation maxIterations
+        graph |> removeUnusedNodes |> closeGaps |> spreadAndSortUnconstrainedNodes |> crossingMinimisation
 
     /// Compute node positions for the real nodes, and adjust virtual nodes to make place. Virtual nodes are also aligned vertically so that chains preferably form straight lines
     let internal computeNodePositions maxCharsPerLine nodesep ranksep edgesep (graph: DiscoveredGraph) =
@@ -957,7 +967,7 @@ module internal GraphLayoutAlgo =
                 match lines with
                 | [] -> [word]
                 | _ ->
-                    let updatedLine = $"{lines.Head} {words}"
+                    let updatedLine = $"{lines.Head} {word}"
                     if updatedLine.Length > limit then
                         word :: lines
                     else
@@ -992,56 +1002,134 @@ module internal GraphLayoutAlgo =
             |> fun n ->
                 match n with
                 | [] -> currentRankHeight / 2f
-                | _ -> n |> List.maxBy (fun n -> n.Size.Height) |> fun n -> float32(n.Size.Height) / 2f + ranksep - (currentRankHeight / 2f)
-
-        let nodes =
-            graph.Nodes
-            |> List.groupBy (fun n -> (getPosition n).Y)
-            |> List.sortBy fst
-            |> List.fold (fun state (rank, nodes) ->
-                let converted = nodes |> List.choose (fun n -> match computeNodeProperties n with | Some node -> Some(n, node) | _ -> None)
-                let verticalRankCenter = (converted |> List.map snd) |> findVerticalCenterOfRank (rank - 1) (converted |> List.maxBy (fun (_, n) -> n.Size.Height) |> fun (_, n) -> n.Size.Height |> float32)
-
-                // TODO: Now place nodes with this vertical center
-
-                let backboneNodeIdx = nodes |> List.tryFindIndex (fun n -> (getPosition n).X = 0f)
-                let (left, right) = nodes |> (fun n -> match backboneNodeIdx with | Some idx -> n |> List.removeAt idx | _ -> n) |> List.partition (fun n -> (getPosition n).X < 0f)
-                match backboneNodeIdx with
-                | Some idx ->
-                    // Place the backbone node centrally and then add nodes left and right
-                    match computeNodeProperties nodes[idx] with
-                    | Some backboneNode ->
-                        backboneNode :: state
-                    | None -> failwith "Virtual nodes are not allowed on the backbone."
                 | _ ->
-                    // Place left and right nodes near the backbone, with half a nodesep on each side to the nearest node
-                    []
+                    let rankMaxHeight = n |> List.maxBy (fun n -> n.Size.Height) |> fun n -> float32(n.Size.Height)
+                    let rankVerticalCenter = n.Head.Position.Y // All nodes on the same rank have the same vertical center
+                    // From the rank's vertical center, add the lower half of the tallest node, then the rank separation, and then the upper half of the tallest node of the next rank
+                    rankVerticalCenter + (rankMaxHeight / 2f) + ranksep + (currentRankHeight / 2f)
 
-                (*let convNodes = nodes |> List.map computeNodeProperties |> List.choose id
+        let (nodes: Node list), (edgePaths: EdgePath list) =
+            graph.Nodes
+            |> List.groupBy getYPosition
+            |> List.sortBy fst
+            |> List.fold (fun (nodes, edgePaths) (rank, newNodes) ->
 
-                let rankYpos = // Get the Y position on which all nodes on this rank need to be centered on
-                    match rank with
-                    | 0 -> 0f
-                    | _ ->
-                        match state |> List.tryFind (fun n -> n.Position.Y = float32(rank - 1)) with
-                        | Some n -> n.Position.Y + ranksep
+                // Convert nodes to new format while keeping the original for reference
+                let converted =
+                    newNodes
+                    |> List.choose (fun n ->
+                        match computeNodeProperties n with
+                        | Some node -> Some(n, Some node)
+                        | _ -> Some(n, None))
+
+                // Calculate vertical center of rank by looking at previous rank, applying ranksep, and adding half the heigth of the tallest node in this rank
+                let maxHeight =
+                    converted
+                    |> List.maxBy (fun (_, n) ->
+                        match n with
+                        | Some n -> n.Size.Height |> float32
+                        | _ -> 0f)
+                    |> fun (_, n) ->
+                        match n with
+                        | Some n -> n.Size.Height |> float32
                         | _ -> 0f
+                let verticalRankCenter = nodes |> findVerticalCenterOfRank (rank - 1) maxHeight
 
-            []*)) []: Node list
+                // Find the backbone node, if it exists on this rank
+                let backboneNodeIdx =
+                    converted
+                    |> List.tryFindIndex (fun (_, conv) ->
+                        match conv with
+                        | Some conv -> conv.Position.X = 0f
+                        | _ -> false)
 
-            (*|> List.collect (fun (rank , nodes) ->
-                let convNodes = nodes |> List.map computeNodeProperties |> List.choose id
-                let backboneNode = nodes |> List.tryFind (fun n -> (getPosition n).X = 0f)
-                match backboneNode with
-                | Some bn ->
-                    match computeNodeProperties bn with
-                    | Some convBn ->
-                        let convBn =
-                            match rank with
-                            | 0 -> convBn
-                            | _ -> convBn // Adjust position to fulfill ranksep constraint
-                        []
-                    | None -> failwith "Virtual nodes are not allowed on the backbone."
-                | None -> [])*)
+                // Partition the remaining nodes by being left or right of the backbone
+                let (left, right) =
+                    converted
+                    |> (fun n ->
+                        match backboneNodeIdx with
+                        | Some idx -> n |> List.removeAt idx
+                        | _ -> n)
+                    |> List.partition (fun (n, _) -> getXPosition n < 0f)
+                    |> fun (l, r) -> l |> List.sortByDescending (fun (n, _) -> getXPosition n), r |> List.sortBy (fun (n, _) -> getXPosition n)
+
+                // Add the backbone node if it exists, otherwise place left and right nodes near the backbone later, with half a nodesep on each side to the nearest node
+                let nodes =
+                    match backboneNodeIdx with
+                    | Some idx ->
+                        let (_, bNode) = converted[idx]
+                        match bNode with
+                        | Some bNode -> { bNode with Position = { X = bNode.Position.X; Y = verticalRankCenter } } :: nodes
+                        | _ -> nodes
+                    | _ -> nodes
+
+                /// Get the edge path for a given connection, if it exists
+                let getEdgePathForConnection edgePaths conn =
+                    edgePaths |> List.tryFindIndex (fun ep -> fst ep.Edge = conn.A && snd ep.Edge = conn.B)
+
+                /// Find the left/right-most node or waypoint on a given y-level
+                let getPreviousNodeOrVirtualCoordinate nodes edgePaths right y =
+                    let latestNode =
+                        nodes
+                        |> List.filter (fun n -> n.Position.Y = y && if right then n.Position.X >= 0f else n.Position.X <= 0f)
+                        |> fun l -> if right then l |> List.sortBy (fun n -> n.Position.X) else l |> List.sortByDescending (fun n -> n.Position.X)
+                        |> List.tryLast
+
+                    let latestWaypoint =
+                        edgePaths
+                        |> List.choose (fun edgePath ->
+                            match edgePath.Waypoints |> Seq.filter (fun w -> w.Y = y && if right then w.X >= 0f else w.X <= 0f) |> Seq.toList with
+                            | [] -> None
+                            | c -> Some c)
+                        |> List.concat
+                        |> fun l -> if right then l |> List.sortBy (fun n -> n.X) else l |> List.sortByDescending (fun n -> n.X)
+                        |> List.tryLast
+
+                    // If both a node and waypoint is found, return the left/right-most.
+                    match latestNode, latestWaypoint with
+                    | Some n, Some c -> if n.Position.X > c.X then InternalNode(n) |> Some else InternalCoordinate(c) |> Some
+                    | Some n, None -> InternalNode(n) |> Some
+                    | None, Some e -> InternalCoordinate(e) |> Some
+                    | None, None -> None
+
+                /// Add nodes and waypoints to the correct position, moving right or left from the backbone
+                let addNodesAndWaypoints (nodes: Node list) edgePaths (newNodes: (GraphNode * Node option) list) (right: bool) =
+                    ((nodes, edgePaths), newNodes) ||> List.fold (fun (nodes, edgePaths) (node, conv) ->
+                        // Find the previous node or virtual coordinate that is left/right of the node to add
+                        let previous = getPreviousNodeOrVirtualCoordinate nodes edgePaths right verticalRankCenter
+
+                        // Get the minimum X coordinate where the next node or waypoint may be placed (not including width of next node)
+                        let getMinimumX = function
+                            | InternalNode n -> n.Position.X + (float32(n.Size.Width) / 2f) + nodesep
+                            | InternalCoordinate c -> c.X + edgesep
+
+                        // Add the new node as node or waypoint, depending on its type
+                        match previous with
+                        | Some p ->
+                            let minX = getMinimumX p |> fun min -> if right then min else -min
+                            match node with
+                            | ConstrainedReal _ ->
+                                // TODO: Add half the width of the new node to minX
+                                nodes, edgePaths
+                            | ConstrainedVirtual(_, _, conn)
+                            | UnconstrainedVirtual(_, conn) ->
+                                match getEdgePathForConnection edgePaths conn with
+                                | Some epIdx ->
+                                    // Update the existing edge path with the new waypoint
+                                    let toUpdate = edgePaths[epIdx]
+                                    nodes, edgePaths |> List.updateAt epIdx { toUpdate with Waypoints = toUpdate.Waypoints |> Seq.append [{ X = minX; Y = verticalRankCenter }] }
+                                | _ ->
+                                    // Add a new edge path with the given waypoint
+                                    let nodeA = graph.Nodes |> List.find (fun n -> match n with | ConstrainedReal(_, _, name) -> name = conn.A | _ -> false)
+                                    let nodeB = graph.Nodes |> List.find (fun n -> match n with | ConstrainedReal(_, _, name) -> name = conn.B | _ -> false)
+                                    nodes, ({ Edge = conn.A, conn.B; Waypoints = [{ X = minX; Y = verticalRankCenter }]; Downwards = (getPosition nodeA).Y < (getPosition nodeB).Y }) :: edgePaths
+                        | None ->
+                            // TODO: Place close to the backbone, but not on it (maybe with nodesep/2?)
+                            nodes, edgePaths
+                    )
+
+                let nodes, edgePaths = (right, true) ||> addNodesAndWaypoints nodes edgePaths
+                let nodes, edgePaths = (left, false) ||> addNodesAndWaypoints nodes edgePaths
+                nodes, edgePaths) ([], [])
 
         graph
