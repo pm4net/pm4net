@@ -992,7 +992,7 @@ module internal GraphLayoutAlgo =
                             Text = name |> wrapText maxCharsPerLine
                             Type = "Event" }
 
-                Some { node with Size = { Width = maxCharsPerLine; Height = node.Text.Length } }
+                Some { node with Size = { Width = (node.Text |> List.maxBy (fun l -> l.Length) |> fun l -> l.Length); Height = node.Text.Length } }
             | _ -> None
 
         /// Calculate the vertical center of a rank based on the previous rank and the tallest node in the current rank.
@@ -1097,38 +1097,41 @@ module internal GraphLayoutAlgo =
                     ((nodes, edgePaths), newNodes) ||> List.fold (fun (nodes, edgePaths) (node, conv) ->
                         // Find the previous node or virtual coordinate that is left/right of the node to add
                         let previous = getPreviousNodeOrVirtualCoordinate nodes edgePaths right verticalRankCenter
+                        let op = if right then (+) else (-)
 
                         // Get the minimum X coordinate where the next node or waypoint may be placed (not including width of next node)
                         let getMinimumX = function
                             | InternalNode n -> n.Position.X + float32(n.Size.Width) / 2f + nodesep
                             | InternalCoordinate c -> c.X + edgesep
 
+                        /// Update the existing edge path with the new waypoint
+                        let updateExistingEdgePath (edgePaths: EdgePath list) idx x y =
+                            let toUpdate = edgePaths[idx]
+                            edgePaths |> List.updateAt idx { toUpdate with Waypoints = toUpdate.Waypoints |> Seq.append [{ X = x; Y = y }] }
+
+                        // Add a new edge path with the given waypoint
+                        let addNewEdgePath (edgePaths: EdgePath list) (graph: DiscoveredGraph) conn x y =
+                            let nodeA = graph.Nodes |> List.find (fun n -> match n with | ConstrainedReal(_, _, name) -> name = conn.A | _ -> false)
+                            let nodeB = graph.Nodes |> List.find (fun n -> match n with | ConstrainedReal(_, _, name) -> name = conn.B | _ -> false)
+                            ({ Edge = conn.A, conn.B; Waypoints = [{ X = x; Y = y }]; Downwards = (getPosition nodeA).Y < (getPosition nodeB).Y }) :: edgePaths
+
+                        // Calculate the next available X position (excluding width of any new nodes)
+                        let minX =
+                            match previous with
+                            | Some p -> getMinimumX p |> fun min -> if right then min else -min
+                            | _ -> (if right then nodesep else -nodesep) / 2f
+
                         // Add the new node as node or waypoint, depending on its type
-                        match previous with
-                        | Some p ->
-                            let minX = getMinimumX p |> fun min -> if right then min else -min
-                            match node with
-                            | ConstrainedReal _ ->
-                                let op = if right then (+) else (-)
-                                match conv with
-                                | Some conv -> { conv with Position = { X = op minX (float32(conv.Size.Width) / 2f); Y = verticalRankCenter } } :: nodes, edgePaths
-                                | _ -> failwith "All real nodes must be converted to the Node type before adding them here."
-                            | ConstrainedVirtual(_, _, conn)
-                            | UnconstrainedVirtual(_, conn) ->
-                                match getEdgePathForConnection edgePaths conn with
-                                | Some epIdx ->
-                                    // Update the existing edge path with the new waypoint
-                                    let toUpdate = edgePaths[epIdx]
-                                    nodes, edgePaths |> List.updateAt epIdx { toUpdate with Waypoints = toUpdate.Waypoints |> Seq.append [{ X = minX; Y = verticalRankCenter }] }
-                                | _ ->
-                                    // Add a new edge path with the given waypoint
-                                    let nodeA = graph.Nodes |> List.find (fun n -> match n with | ConstrainedReal(_, _, name) -> name = conn.A | _ -> false)
-                                    let nodeB = graph.Nodes |> List.find (fun n -> match n with | ConstrainedReal(_, _, name) -> name = conn.B | _ -> false)
-                                    nodes, ({ Edge = conn.A, conn.B; Waypoints = [{ X = minX; Y = verticalRankCenter }]; Downwards = (getPosition nodeA).Y < (getPosition nodeB).Y }) :: edgePaths
-                        | None ->
-                            // TODO: Place close to the backbone, but not on it (maybe with nodesep/2?)
-                            nodes, edgePaths
-                    )
+                        match node with
+                        | ConstrainedReal _ ->
+                            match conv with
+                            | Some conv -> { conv with Position = { X = op minX (float32(conv.Size.Width) / 2f); Y = verticalRankCenter } } :: nodes, edgePaths
+                            | _ -> failwith "All real nodes must be converted to the Node type before adding them here."
+                        | ConstrainedVirtual(_, _, conn)
+                        | UnconstrainedVirtual(_, conn) ->
+                            match getEdgePathForConnection edgePaths conn with
+                            | Some epIdx -> nodes, updateExistingEdgePath edgePaths epIdx minX verticalRankCenter
+                            | _ -> nodes, addNewEdgePath edgePaths graph conn minX verticalRankCenter)
 
                 let nodes, edgePaths = (right, true) ||> addNodesAndWaypoints nodes edgePaths
                 let nodes, edgePaths = (left, false) ||> addNodesAndWaypoints nodes edgePaths
@@ -1146,4 +1149,4 @@ module internal GraphLayoutAlgo =
                 | _, UnconstrainedVirtual(_, conn) -> conn)
             |> List.distinct
 
-        { Nodes = nodes; Edges = edges; EdgePaths = edgePaths |> Seq.toList }
+        { Nodes = nodes |> List.rev; Edges = edges; EdgePaths = edgePaths |> Seq.toList |> List.rev }

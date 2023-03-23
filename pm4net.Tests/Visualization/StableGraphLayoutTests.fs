@@ -74,19 +74,19 @@ module ``Stable graph layout tests`` =
         let dotNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
         let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
+        let discGraph = (goNsg, skeleton, dfg) |||> GraphLayoutAlgo.constructDiscoveredGraph true
+        let discDot = LayoutStepsVisualizer.discoveredGraphToDot discGraph
+        let nodePos = discGraph |> GraphLayoutAlgo.computeNodePositions 30 2f 3f 0.5f
 
         let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true, 30, 1f, 2f, 0.5f)
-        //let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
-
-        //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
         discoveredGraph |> Assert.NotNull
 
     [<Fact>]
     let ``Can discover global order from 'GitHub pm4py' log and discovered DFG`` () =
         let json = File.ReadAllText("github_pm4py.jsonocel")
         let log = OcelJson.deserialize true json
-        //let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["case:concept:name"], log)
-        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
+        let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["case:concept:name"], log)
+        //let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
         let (rankGraph, skeleton, components) = StableGraphLayout.ComputeRankGraph log
 
         // For printing NSG with DOT (only works with neato or fdp layout)
@@ -95,9 +95,9 @@ module ``Stable graph layout tests`` =
         let dotNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot nsg
         let goNsg = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
+        let discGraph = (goNsg, skeleton, dfg) |||> GraphLayoutAlgo.constructDiscoveredGraph true
+        let discDot = LayoutStepsVisualizer.discoveredGraphToDot discGraph
+        let nodePos = discGraph |> GraphLayoutAlgo.computeNodePositions 30 2f 3f 0.5f
 
         let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true, 30, 1f, 2f, 0.5f)
-        //let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
-
-        //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
         discoveredGraph |> Assert.NotNull
