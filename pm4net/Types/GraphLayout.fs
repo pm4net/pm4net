@@ -42,7 +42,7 @@ type GraphNode =
     | ConstrainedReal of Position: Position * DiscoveryIndex: int * Name: string
     | ConstrainedVirtual of Position: Position * DiscoveryIndex: int * Connection
     | UnconstrainedVirtual of Position: Position * Connection
-type DiscoveredGraph = DirectedGraph<GraphNode>
+type DiscoveredGraph = DirectedGraph<GraphNode, int>
 
 /// Type to represent a variation of a trace, with all its events, a sequence of nodes and edges, and the frequency of the variation
 type internal Variation<'a, 'b> = {
@@ -84,6 +84,7 @@ type EdgePath = {
 /// A global order defines a collection of nodes and their position, as well as paths between nodes where non-straight edges are required.
 type GlobalOrder = {
     Nodes: Node seq
+    Edges: Connection seq
     EdgePaths: EdgePath seq
 }
 

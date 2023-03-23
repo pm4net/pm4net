@@ -151,8 +151,8 @@ type LayoutStepsVisualizer private () =
                 | ConstrainedVirtual(pos, idx, _) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="red" point-size="6">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor="red" width="0.1"]"""
                 | UnconstrainedVirtual(pos, conn) -> sb.AppendLine $""""{getId node}" [label="" xlabel=<<font color="green" point-size="6">{getFloat pos.X}</font>> pos="{getFloat pos.X},-{pos.Y}!" shape=circle style=filled fillcolor=green width="0.1"]""")
 
-        let addEdges (edges: (GraphNode * GraphNode) list) (sb: StringBuilder) =
-            (sb, edges) ||> List.fold (fun sb (a, b) ->
+        let addEdges (edges: (GraphNode * GraphNode * int) list) (sb: StringBuilder) =
+            (sb, edges) ||> List.fold (fun sb (a, b, _) ->
                 sb.AppendLine $""""{getId a}" -> "{getId b}" [label="" arrowsize="0.5" color="{getEdgeColor(a, b)}"]""")
 
         let sb = StringBuilder()

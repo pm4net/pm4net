@@ -76,7 +76,7 @@ module ``Stable graph layout tests`` =
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
         let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true, 30, 1f, 2f, 0.5f)
-        let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
+        //let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
 
         //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
         discoveredGraph |> Assert.NotNull
@@ -97,7 +97,7 @@ module ``Stable graph layout tests`` =
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
 
         let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true, 30, 1f, 2f, 0.5f)
-        let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
+        //let discDot = LayoutStepsVisualizer.discoveredGraphToDot discoveredGraph
 
         //let crossMinNsgDot = LayoutStepsVisualizer.crossMinGraphToDot globalOrder
         discoveredGraph |> Assert.NotNull
