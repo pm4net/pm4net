@@ -53,12 +53,13 @@ type internal Variation<'a, 'b> = {
 
 (* --- "Pretty" types to expose to the callers --- *)
 
-/// A point in a coordinate system
+/// A point in a coordinate system.
 type Coordinate = {
     X: float32
     Y: float32
 }
 
+/// The size of a node.
 type Size = {
     Width: int
     Height: int
@@ -82,7 +83,7 @@ type EdgePath = {
 }
 
 /// A global order defines a collection of nodes and their position, as well as paths between nodes where non-straight edges are required.
-type GlobalOrder = {
+type GraphLayout = {
     Nodes: Node seq
     Edges: Connection seq
     EdgePaths: EdgePath seq

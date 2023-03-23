@@ -904,12 +904,12 @@ module internal GraphLayoutAlgo =
                 |> List.tryHead // Choose the first value as there should only be one, and only one
 
             /// Add a constrained edge to the graph, finding and using any constrained virtual nodes when the edge spans more than one rank
-            let addConstrainedEdge a b freq graph =
+            let addConstrainedEdge a b edge graph =
                 let nameA, nameB = getNodeName a, getNodeName b
                 let nodeA, nodeB = findNode graph nameA, findNode graph nameB
                 let posA, posB = getPosition nodeA, getPosition nodeB
                 match abs(posA.Y - posB.Y) with
-                | 1 -> { graph with Edges = (nodeA, nodeB, freq) :: graph.Edges }, true
+                | 1 -> { graph with Edges = (nodeA, nodeB, edge.Statistics.Frequency) :: graph.Edges }, true
                 | _ ->
                     let (_, nsgNodeA) = goNsg.Nodes |> List.find (fun (_, n) -> match n with | Real(_, _, name) -> name = nameA | _ -> false)
                     let (_, nsgNodeB) = goNsg.Nodes |> List.find (fun (_, n) -> match n with | Real(_, _, name) -> name = nameB | _ -> false)
@@ -917,14 +917,14 @@ module internal GraphLayoutAlgo =
                     match nodesOnPath with
                     | Some nodesOnPath ->
                         (graph, nsgNodeB :: nodesOnPath @ [nsgNodeA] |> List.pairwise) ||> List.fold (fun graph (start, target) ->
-                            { graph with Edges = (start |> findNodeFromSeqNode graph, target |> findNodeFromSeqNode graph, freq) :: graph.Edges }) |> fun g -> g, true
+                            { graph with Edges = (start |> findNodeFromSeqNode graph, target |> findNodeFromSeqNode graph, edge.Statistics.Frequency) :: graph.Edges }) |> fun g -> g, true
                     | None -> graph, false // Adding the edge was not successful, likely because it isn't actually constrainted. Return false to add the edge as unconstrained instead.
 
             /// Add an unconstrained edge to the graph, adding unconstrained virtual nodes if it spans multiple ranks
-            let addUnconstrainedEdge a b freq graph =
+            let addUnconstrainedEdge a b edge graph =
 
                 /// Add a sequence of virtual unconstrained nodes with an initial ordering between two constrained nodes
-                let rec addVirtualNodesBetweenRanks (graph: DiscoveredGraph) (nodeA, nameA, posA: Position) (nodeB, nameB, posB: Position) edgeWeight =
+                let rec addVirtualNodesBetweenRanks (graph: DiscoveredGraph) (nodeA, nameA, posA: Position) (nodeB, nameB, posB: Position) edge =
                     let upwards = posA.Y - posB.Y >= 0 // Whether the direction is upwards or downwards
                     let nextRank = posA.Y + if upwards then -1 else 1 // The next rank to consider in the given direction
                     match nextRank = posB.Y with
@@ -932,10 +932,10 @@ module internal GraphLayoutAlgo =
                         // Puts backwards edges to the right side of the backbone and forward edges on the left side (according to Mennens 2019). Can both be good or bad depending on graph.
                         let xPos = if posA.X < posB.X then posB.X - 0.5f else posB.X + 0.5f
                         let nodePos : Position = { X = xPos; Y = nextRank }
-                        let unconstrainedNode = UnconstrainedVirtual(nodePos, { A = nameA; B = nameB; Weight = edgeWeight })
+                        let unconstrainedNode = UnconstrainedVirtual(nodePos, { A = nameA; B = nameB; Weight = edge.Statistics.Frequency })
                         let graph = { graph with Nodes = unconstrainedNode :: graph.Nodes; Edges = (nodeA, unconstrainedNode, freq) :: graph.Edges }
-                        addVirtualNodesBetweenRanks graph (unconstrainedNode, nameA, nodePos) (nodeB, nameB, posB) edgeWeight
-                    | true -> { graph with Edges = (nodeA, nodeB, freq) :: graph.Edges }
+                        addVirtualNodesBetweenRanks graph (unconstrainedNode, nameA, nodePos) (nodeB, nameB, posB) edge
+                    | true -> { graph with Edges = (nodeA, nodeB, edge.Statistics.Frequency) :: graph.Edges }
 
                 let nameA, nameB = getNodeName a, getNodeName b
                 let nodeA, nodeB = findNode graph nameA, findNode graph nameB
@@ -944,16 +944,16 @@ module internal GraphLayoutAlgo =
                 | true -> graph
                 | _ -> 
                     match abs(posA.Y - posB.Y) with
-                    | 1 -> { graph with Edges = (nodeA, nodeB, freq) :: graph.Edges }
-                    | _ -> addVirtualNodesBetweenRanks graph (nodeA, nameA, posA) (nodeB, nameB, posB) freq
+                    | 1 -> { graph with Edges = (nodeA, nodeB, edge.Statistics.Frequency) :: graph.Edges }
+                    | _ -> addVirtualNodesBetweenRanks graph (nodeA, nameA, posA) (nodeB, nameB, posB) edge
 
             match skeleton |> isConstrained a b with
             | true ->
                 // Check whether the edge could successfully be added as a constrained edge, add it as unconstrained if it failed
-                match graph |> addConstrainedEdge a b edge.Statistics.Frequency with
+                match graph |> addConstrainedEdge a b edge with
                 | graph, true -> graph
-                | graph, false -> graph |> addUnconstrainedEdge a b edge.Statistics.Frequency
-            | false -> graph |> addUnconstrainedEdge a b edge.Statistics.Frequency)
+                | graph, false -> graph |> addUnconstrainedEdge a b edge
+            | false -> graph |> addUnconstrainedEdge a b edge)
 
         graph |> removeUnusedNodes |> closeGaps |> spreadAndSortUnconstrainedNodes |> crossingMinimisation
 

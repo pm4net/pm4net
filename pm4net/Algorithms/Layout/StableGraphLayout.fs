@@ -114,7 +114,7 @@ type StableGraphLayout private() =
 
     /// Compute a global order for a global rank graph by the means of a discovered model that is a subgraph of the global rank graph.
     /// Edges that are identical in its origin and destination can be merged together in order to avoid multiple edges in the resulting graph.
-    static member ComputeGlobalOrder (rankGraph, skeleton, components, discoveredModel, mergeEdges, maxCharsPerLine, nodesep, ranksep, edgesep) =
+    static member ComputeGraphLayout (rankGraph, skeleton, components, discoveredModel, mergeEdges, maxCharsPerLine, nodesep, ranksep, edgesep) =
         let (rankGraph, _) = (rankGraph, components, discoveredModel) |||> GraphLayoutAlgo.fixHorizontalEdgesInGlobalRankGraphForDiscoveredModel
         let globalOrder = (rankGraph, skeleton) ||> StableGraphLayout.computeGlobalRanking
         let discoveredGraph = (globalOrder, skeleton, discoveredModel) |||> GraphLayoutAlgo.constructDiscoveredGraph mergeEdges
@@ -132,7 +132,7 @@ type StableGraphLayout private() =
         nodesep,
         ranksep,
         edgesep) =
-            StableGraphLayout.ComputeGlobalOrder(
+            StableGraphLayout.ComputeGraphLayout(
                 rankGraph,
                 skeleton |> Seq.map List.ofSeq |> List.ofSeq,
                 components |> Seq.map Set.ofSeq |> List.ofSeq,

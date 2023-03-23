@@ -76,9 +76,10 @@ module ``Stable graph layout tests`` =
         let dotGoNsg = LayoutStepsVisualizer.nodeSequenceGraphToDot goNsg
         let discGraph = (goNsg, skeleton, dfg) |||> GraphLayoutAlgo.constructDiscoveredGraph true
         let discDot = LayoutStepsVisualizer.discoveredGraphToDot discGraph
-        let nodePos = discGraph |> GraphLayoutAlgo.computeNodePositions 30 2f 3f 0.5f
+        let nodePos = discGraph |> GraphLayoutAlgo.computeNodePositions 15 2f 3f 0.5f
+        let nodePosDot = LayoutStepsVisualizer.globalOrderToDot nodePos
 
-        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true, 30, 1f, 2f, 0.5f)
+        let discoveredGraph = StableGraphLayout.ComputeGraphLayout(rankGraph, skeleton, components, dfg, true, 30, 1f, 2f, 0.5f)
         discoveredGraph |> Assert.NotNull
 
     [<Fact>]
@@ -98,6 +99,7 @@ module ``Stable graph layout tests`` =
         let discGraph = (goNsg, skeleton, dfg) |||> GraphLayoutAlgo.constructDiscoveredGraph true
         let discDot = LayoutStepsVisualizer.discoveredGraphToDot discGraph
         let nodePos = discGraph |> GraphLayoutAlgo.computeNodePositions 30 2f 3f 0.5f
+        let nodePosDot = LayoutStepsVisualizer.globalOrderToDot nodePos
 
-        let discoveredGraph = StableGraphLayout.ComputeGlobalOrder(rankGraph, skeleton, components, dfg, true, 30, 1f, 2f, 0.5f)
+        let discoveredGraph = StableGraphLayout.ComputeGraphLayout(rankGraph, skeleton, components, dfg, true, 30, 1f, 2f, 0.5f)
         discoveredGraph |> Assert.NotNull

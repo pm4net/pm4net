@@ -164,3 +164,19 @@ type LayoutStepsVisualizer private () =
         let sb = sb |> addEdges graph.Edges
         let sb = sb.AppendLine "}"
         sb.ToString()
+
+    /// Only works with Neato layout engine
+    static member globalOrderToDot (graph: GraphLayout) =
+
+        let addNodes (nodes: Node seq) (sb: StringBuilder) =
+            (sb, nodes) ||> Seq.fold (fun sb n ->
+                sb.AppendLine $""""{n.Id}" [label="" xlabel="" pos="{n.Position.X - (n.Position.X / 2f)},{n.Position.Y - (n.Position.Y / 2f)}!" width="{n.Size.Width}" height={n.Size.Height} shape=rect style=filled fillcolor="#fff2cc"]""")
+
+        let sb = StringBuilder()
+        let sb = sb.AppendLine "digraph dfg {"
+        let sb = sb.AppendLine "splines=true"
+        let sb = sb.AppendLine "fixedsize=true"
+        let sb = sb.AppendLine ""
+        let sb = sb |> addNodes graph.Nodes
+        let sb = sb.AppendLine "}"
+        sb.ToString()
