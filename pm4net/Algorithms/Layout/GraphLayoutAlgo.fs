@@ -933,7 +933,7 @@ module internal GraphLayoutAlgo =
                         let xPos = if posA.X < posB.X then posB.X - 0.5f else posB.X + 0.5f
                         let nodePos : Position = { X = xPos; Y = nextRank }
                         let unconstrainedNode = UnconstrainedVirtual(nodePos, { A = nameA; B = nameB; Weight = edge.Statistics.Frequency })
-                        let graph = { graph with Nodes = unconstrainedNode :: graph.Nodes; Edges = (nodeA, unconstrainedNode, freq) :: graph.Edges }
+                        let graph = { graph with Nodes = unconstrainedNode :: graph.Nodes; Edges = (nodeA, unconstrainedNode, edge.Statistics.Frequency) :: graph.Edges }
                         addVirtualNodesBetweenRanks graph (unconstrainedNode, nameA, nodePos) (nodeB, nameB, posB) edge
                     | true -> { graph with Edges = (nodeA, nodeB, edge.Statistics.Frequency) :: graph.Edges }
 
