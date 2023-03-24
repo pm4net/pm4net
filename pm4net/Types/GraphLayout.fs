@@ -16,6 +16,7 @@ type Skeleton = (SequenceElement<string> * int) list list
 /// Connected nodes within a global rank graph
 type Components = Set<string> list
 
+/// Indicates which nodes a virtual waypoint connects, and what weight the edge has.
 type Connection = {
     A: string
     B: string
