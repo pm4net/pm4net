@@ -54,6 +54,21 @@ type OcelHelpers private () =
         |> List.groupBy (fun (_, v) -> v.OMap |> Seq.head)
         |> List.map snd
 
+    /// Create a trace for an object type in order to use it for the stable graph layout algorithm.
+    static member TraceForObjectType objType (log: OcelLog) =
+        log
+        |> OcelHelpers.OrderedTracesOfFlattenedLog
+        |> List.map (fun l -> l |> List.map snd)
+        |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
+        |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Type = objType } : InputTypes.Trace)
+
+    /// Create traces for all object types in order to use it for the stable graph layout algorithm.
+    static member AllTracesOfLog (log: OcelLog) =
+        log.ObjectTypes
+        |> Set.toList
+        |> List.map (fun t -> t |> OcelHelpers.Flatten log |> OcelHelpers.TraceForObjectType (Some t))
+        |> List.concat
+
     /// Get an attribute from an OCEL event, if it exists.
     static member TryGetAttribute attr event =
         event.VMap |> Map.tryFind attr
@@ -61,17 +76,19 @@ type OcelHelpers private () =
     /// Get a string attribute from an OCEL event. Returns an empty string if it does not exist.
     static member GetStringAttribute attr event =
         (attr, event) ||> OcelHelpers.TryGetAttribute
-        |> Option.defaultValue (OcelString String.Empty)
-        |> fun v -> match v with | OcelString s -> s | _ -> String.Empty
+        |> fun v -> match v with | Some(OcelString s) -> Some s | _ -> None
 
     /// Get the namespace attribute from an OCEL event. Returns an empty string if it does not exist.
     static member GetNamespace event =
-        let ns = event |> OcelHelpers.GetStringAttribute Constants.``namespace``
-        if ns = String.Empty then event |> OcelHelpers.GetStringAttribute Constants.sourceContext else ns
+        match event |> OcelHelpers.GetStringAttribute Constants.``namespace`` with
+        | Some ns -> Some ns
+        | _ -> event |> OcelHelpers.GetStringAttribute Constants.sourceContext
 
     /// Get the log level attribute from an OCEL event. Returns the Unknown case if it does not exist.
     static member GetLogLevel event =
-        event |> OcelHelpers.GetStringAttribute Constants.level |> LogLevel.FromString
+        match event |> OcelHelpers.GetStringAttribute Constants.level with
+        | Some level -> level |> LogLevel.FromString |> Some
+        | _ -> None
 
     /// Extract a tree hierarchy from a list of fully qualified namespaces
     static member NamespaceTree separators (namespaces: string seq) =

@@ -1,13 +1,14 @@
 namespace pm4net.Algorithms.Discovery.Ocel
 
-open System
+open GraphTypes
+open InputTypes
 open OCEL.Types
-open pm4net.Types.Graphs
+open pm4net.Types
 open pm4net.Utilities
 
 [<AbstractClass; Sealed>]
 type OcelDfg private () =
-
+    
     /// Count the number of occurences of an activity in multiple traces
     static member private noOfEventsWithCase (traces: OcelEvent list list) =
         // For each trace, count the number of distinct activities and accumulate the result into a mapping for all traces
@@ -36,22 +37,24 @@ type OcelDfg private () =
         e2.Timestamp - e1.Timestamp
 
     /// Find an event node in a list of nodes by its name and namespace
-    static member private findNode name ns nodes =
+    static member private findNode name ns (nodes: Node<NodeInfo> list) =
         nodes
         |> List.find (fun n ->
             match n with
-            | EventNode e -> e.Name = name && e.Namespace = ns
-            | _ -> false
-        )
+            | EventNode e -> e.Name = name && (match e.Info with | Some info -> info.Namespace = ns | _ -> false)
+            | _ -> false)
 
     /// Find an edge in a list of edges by its name and namespace of start and end, and the object type
-    static member private findEdge (name1, ns1) (name2, ns2) (edges: (Node * Node * Edge) list) =
+    static member private findEdge (name1, ns1) (name2, ns2) (edges: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) list) =
         edges
         |> List.find (fun (a, b, e) ->
             match a, b with
-            | EventNode a, EventNode b -> a.Name = name1 && a.Namespace = ns1 && b.Name = name2 && b.Namespace = ns2
-            | _ -> false
-        )
+            | EventNode a, EventNode b ->
+                a.Name = name1 &&
+                b.Name = name2 &&
+                (match a.Info with | Some info -> info.Namespace = ns1 | _ -> false) &&
+                (match b.Info with | Some info -> info.Namespace = ns1 | _ -> false)
+            | _ -> false)
 
     /// <summary>
     /// Create an Object-Centric Directly-Follows-Graph (DFG) for a flattened log, given the object type of the flattened log and a set of filter parameters.
@@ -65,7 +68,7 @@ type OcelDfg private () =
     /// <param name="objectType">The object type after whicht the log was flattened.</param>
     /// <param name="log">An object-centric event log that was flattened for a specific object type.</param>
     /// <returns>An Object-Centric Directly-Follows-Graph (DFG) with the filters applied.</returns>
-    static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OcelLog) : DirectedGraph<Node, Edge> =
+    static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
         // Discover the traces based on the referenced object type and discard the event ID's
         let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Helpers.mapNestedList snd
 
@@ -82,16 +85,18 @@ type OcelDfg private () =
             fun ((act, ns), events) -> EventNode(
                 {
                     Name = act
-                    Namespace = ns
-                    Level = events |> Helpers.mostCommonValue (fun e -> OcelHelpers.GetLogLevel e)
-                    Statistics = { NodeStatistics.Default with Frequency = events.Length }
+                    Info = Some {
+                        Frequency = events.Length
+                        Namespace = ns
+                        Level = events |> Helpers.mostCommonValue (fun e -> OcelHelpers.GetLogLevel e)
+                    }
                 }
             )
         )
-
+        
         // Step 5: Connect the nodes that meet the minSuccessions treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= minSuccessions
         let edges =
-            (([]: (Node * Node * Edge) list), tracesFilteredForFrequency)
+            (([]: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) list), tracesFilteredForFrequency)
             ||> List.fold (fun edges trace ->
                 // Get pairs of events that directly follow each other
                 let directlyFollowing = trace |> List.pairwise
@@ -104,17 +109,15 @@ type OcelDfg private () =
                         let (a, b, edge) = s[i]
                         s |> List.updateAt i (a, b,
                         { edge with
-                            Statistics = {
-                                edge.Statistics with
-                                    Frequency = edge.Statistics.Frequency + 1
-                                    Durations = OcelDfg.durationBetweenEvents v :: edge.Statistics.Durations
-                            }
+                            Weight = edge.Weight + 1
+                            Info =
+                                match edge.Info with
+                                | Some edgeInfo -> Some { edgeInfo with Durations = OcelDfg.durationBetweenEvents v :: edgeInfo.Durations }
+                                | _ -> None
                         })
-                    | None -> (aNode, bNode, { Type = objectType; Statistics = { EdgeStatistics.Default with Durations = [OcelDfg.durationBetweenEvents v] } }) :: s
-                )
-            )
+                    | None -> (aNode, bNode, { Weight = 1; Type = Some objectType; Info = Some { Durations = [OcelDfg.durationBetweenEvents v] } }) :: s))
             // Filter out edges that do not satisfy minimum threshold
-            |> List.filter (fun (_, _, e) -> e.Statistics.Frequency >= minSuccessions)
+            |> List.filter (fun (_, _, e) -> e.Weight >= minSuccessions)
 
         // Find and insert start and stop nodes and their respective edges
         let starts = tracesFilteredForFrequency |> List.filter (fun l -> not l.IsEmpty) |> List.map (fun t -> t.Head) |> List.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
@@ -124,8 +127,8 @@ type OcelDfg private () =
         let nodes = startNode :: endNode :: nodes
         let edges =
             edges
-            |> List.append (starts |> List.map (fun ((name, ns), count) -> (startNode, nodes |> OcelDfg.findNode name ns, { Type = objectType; Statistics = { EdgeStatistics.Default with Frequency = count } }))) // Connect all start nodes
-            |> List.append (ends |> List.map (fun ((name, ns), count) -> (nodes |> OcelDfg.findNode name ns, endNode, { Type = objectType; Statistics = { EdgeStatistics.Default with Frequency = count } }))) // Connect all end nodes
+            |> List.append (starts |> List.map (fun ((name, ns), count) -> (startNode, nodes |> OcelDfg.findNode name ns, { Weight = count; Type = Some objectType; Info = None }))) // Connect all start nodes
+            |> List.append (ends |> List.map (fun ((name, ns), count) -> (nodes |> OcelDfg.findNode name ns, endNode, { Weight = count; Type = Some objectType; Info = None }))) // Connect all end nodes
 
         // Return a directed graph with the discovered nodes and edges
         { Nodes = nodes; Edges = edges }
@@ -142,7 +145,7 @@ type OcelDfg private () =
     /// <param name="includedTypes">A list of strings with the object types to include in the DFG.</param>
     /// <param name="log">An object-centric event log.</param>
     /// <returns>An Object-Centric Directly-Follows-Graph (DFG) with the filters applied.</returns>
-    static member Discover(minEvents, minOccurrences, minSuccessions, includedTypes, log: OcelLog) : DirectedGraph<Node, Edge> =
+    static member Discover(minEvents, minOccurrences, minSuccessions, includedTypes, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
         log.ObjectTypes
         |> Set.filter (fun t -> includedTypes |> List.contains t) // Only include object types from the list in the parameters
         |> Seq.map (fun t -> t, OcelHelpers.Flatten log t) // Flatten the log based on every object type
@@ -154,13 +157,27 @@ type OcelDfg private () =
                     List.append state.Nodes value.Nodes
                     |> List.groupBy (fun n ->
                         match n with
-                        | EventNode n -> nameof(EventNode) + n.Name + n.Namespace + n.Level.ToString()
+                        | EventNode n ->
+                            let baseStr = nameof(EventNode)
+                            match n.Info with
+                            | Some info ->
+                                let baseStr =
+                                    match info.Namespace with
+                                    | Some ns -> baseStr + ns
+                                    | _ -> baseStr
+                                match info.Level with
+                                | Some lvl -> baseStr + lvl.ToString()
+                                | _ -> baseStr
+                            | _ -> baseStr
                         | StartNode n -> nameof(StartNode) + n
                         | EndNode n -> nameof(EndNode) + n
                     )
                     |> List.map (fun (_, nodes) -> nodes |> List.maxBy (fun n ->
                         match n with
-                        | EventNode n -> n.Statistics.Frequency
+                        | EventNode n ->
+                            match n.Info with
+                            | Some info -> info.Frequency
+                            | _ -> 0
                         | StartNode _ | EndNode _ -> 0 // There should only be one start and end node anyway
                     ))
                 Edges = List.append state.Edges value.Edges
@@ -169,8 +186,8 @@ type OcelDfg private () =
 
     (* --- Overloads for C# OCEL log type --- *)
 
-    static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node, Edge> =
+    static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node<_>, Edge<_>> =
         OcelDfg.DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)
 
-    static member Discover(minEvents, minOccurrences, minSuccessions, includedTypes : string seq, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node, Edge> =
+    static member Discover(minEvents, minOccurrences, minSuccessions, includedTypes : string seq, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node<_>, Edge<_>> =
         OcelDfg.Discover(minEvents, minOccurrences, minSuccessions, includedTypes |> List.ofSeq, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)

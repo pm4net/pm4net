@@ -20,18 +20,12 @@
 
   <ItemGroup>
     <Compile Include="Types\Common.fs" />
-    <Compile Include="Types\Graphs.fs" />
-    <Compile Include="Types\GraphLayout.fs" />
     <Compile Include="Types\Trees.fs" />
-    <Compile Include="Types\ProcessTree.fs" />
-    <Compile Include="Types\PetriNets.fs" />
+    <Compile Include="Types\DirectlyFollowsGraph.fs" />
     <Compile Include="Utilities\Helpers.fs" />
     <Compile Include="Utilities\OcelHelpers.fs" />
-    <Compile Include="Visualization\Layout\LayoutStepsVisualizer.fs" />
     <Compile Include="Visualization\Ocel\Graphviz.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelDfg.fs" />
-    <Compile Include="Algorithms\Discovery\Ocel\OcelPetriNet.fs" />
-    <Compile Include="Algorithms\Layout\GraphLayoutAlgo.fs" />
     <Compile Include="Algorithms\Layout\StableGraphLayout.fs" />
 	<Content Include="..\README.md" Pack="true" PackagePath="\">
 	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -43,6 +37,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="OCEL" Version="1.3.0" />
     <PackageReference Include="OCEL.CSharp" Version="1.3.0" />
+    <PackageReference Include="ProcessGraphLayout" Version="0.0.1-alpha.0" />
   </ItemGroup>
 
   <ItemGroup>
