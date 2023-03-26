@@ -4,7 +4,7 @@ open System
 open System.Drawing
 
 module internal Helpers =
-
+    
     /// Apply a mapping function to a nested list
     let mapNestedList mapper nestedList =
         nestedList |> List.map (fun list -> list |> List.map mapper)

@@ -3,9 +3,6 @@ namespace pm4net.Algorithms.Layout
 open System.Runtime.CompilerServices
 open OCEL.Types
 open pm4net.Types
-open pm4net.Types.Graphs
-open pm4net.Types.GraphLayout
-open pm4net.Algorithms.Layout
 open pm4net.Utilities
 
 [<assembly: InternalsVisibleTo("pm4net.Tests")>]

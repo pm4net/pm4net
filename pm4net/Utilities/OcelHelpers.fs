@@ -61,17 +61,19 @@ type OcelHelpers private () =
     /// Get a string attribute from an OCEL event. Returns an empty string if it does not exist.
     static member GetStringAttribute attr event =
         (attr, event) ||> OcelHelpers.TryGetAttribute
-        |> Option.defaultValue (OcelString String.Empty)
-        |> fun v -> match v with | OcelString s -> s | _ -> String.Empty
+        |> fun v -> match v with | Some(OcelString s) -> Some s | _ -> None
 
     /// Get the namespace attribute from an OCEL event. Returns an empty string if it does not exist.
     static member GetNamespace event =
-        let ns = event |> OcelHelpers.GetStringAttribute Constants.``namespace``
-        if ns = String.Empty then event |> OcelHelpers.GetStringAttribute Constants.sourceContext else ns
+        match event |> OcelHelpers.GetStringAttribute Constants.``namespace`` with
+        | Some ns -> Some ns
+        | _ -> event |> OcelHelpers.GetStringAttribute Constants.sourceContext
 
     /// Get the log level attribute from an OCEL event. Returns the Unknown case if it does not exist.
     static member GetLogLevel event =
-        event |> OcelHelpers.GetStringAttribute Constants.level |> LogLevel.FromString
+        match event |> OcelHelpers.GetStringAttribute Constants.level with
+        | Some level -> level |> LogLevel.FromString |> Some
+        | _ -> None
 
     /// Extract a tree hierarchy from a list of fully qualified namespaces
     static member NamespaceTree separators (namespaces: string seq) =

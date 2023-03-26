@@ -1,13 +1,14 @@
 namespace pm4net.Algorithms.Discovery.Ocel
 
-open System
+open GraphTypes
+open InputTypes
 open OCEL.Types
-open pm4net.Types.Graphs
+open pm4net.Types
 open pm4net.Utilities
 
 [<AbstractClass; Sealed>]
 type OcelDfg private () =
-
+    
     /// Count the number of occurences of an activity in multiple traces
     static member private noOfEventsWithCase (traces: OcelEvent list list) =
         // For each trace, count the number of distinct activities and accumulate the result into a mapping for all traces
@@ -36,22 +37,24 @@ type OcelDfg private () =
         e2.Timestamp - e1.Timestamp
 
     /// Find an event node in a list of nodes by its name and namespace
-    static member private findNode name ns nodes =
+    static member private findNode name ns (nodes: Node<NodeInfo> list) =
         nodes
         |> List.find (fun n ->
             match n with
-            | EventNode e -> e.Name = name && e.Namespace = ns
-            | _ -> false
-        )
+            | EventNode e -> e.Name = name && (match e.Info with | Some info -> info.Namespace = ns | _ -> false)
+            | _ -> false)
 
     /// Find an edge in a list of edges by its name and namespace of start and end, and the object type
-    static member private findEdge (name1, ns1) (name2, ns2) (edges: (Node * Node * Edge) list) =
+    static member private findEdge (name1, ns1) (name2, ns2) (edges: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) list) =
         edges
         |> List.find (fun (a, b, e) ->
             match a, b with
-            | EventNode a, EventNode b -> a.Name = name1 && a.Namespace = ns1 && b.Name = name2 && b.Namespace = ns2
-            | _ -> false
-        )
+            | EventNode a, EventNode b ->
+                a.Name = name1 &&
+                b.Name = name2 &&
+                (match a.Info with | Some info -> info.Namespace = ns1 | _ -> false) &&
+                (match b.Info with | Some info -> info.Namespace = ns1 | _ -> false)
+            | _ -> false)
 
     /// <summary>
     /// Create an Object-Centric Directly-Follows-Graph (DFG) for a flattened log, given the object type of the flattened log and a set of filter parameters.
@@ -65,7 +68,7 @@ type OcelDfg private () =
     /// <param name="objectType">The object type after whicht the log was flattened.</param>
     /// <param name="log">An object-centric event log that was flattened for a specific object type.</param>
     /// <returns>An Object-Centric Directly-Follows-Graph (DFG) with the filters applied.</returns>
-    static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OcelLog) : DirectedGraph<Node, Edge> =
+    static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
         // Discover the traces based on the referenced object type and discard the event ID's
         let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Helpers.mapNestedList snd
 
@@ -82,16 +85,18 @@ type OcelDfg private () =
             fun ((act, ns), events) -> EventNode(
                 {
                     Name = act
-                    Namespace = ns
-                    Level = events |> Helpers.mostCommonValue (fun e -> OcelHelpers.GetLogLevel e)
-                    Statistics = { NodeStatistics.Default with Frequency = events.Length }
+                    Info = Some {
+                        Frequency = events.Length
+                        Namespace = ns
+                        Level = events |> Helpers.mostCommonValue (fun e -> OcelHelpers.GetLogLevel e)
+                    }
                 }
             )
         )
 
         // Step 5: Connect the nodes that meet the minSuccessions treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= minSuccessions
         let edges =
-            (([]: (Node * Node * Edge) list), tracesFilteredForFrequency)
+            (([]: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) list), tracesFilteredForFrequency)
             ||> List.fold (fun edges trace ->
                 // Get pairs of events that directly follow each other
                 let directlyFollowing = trace |> List.pairwise
