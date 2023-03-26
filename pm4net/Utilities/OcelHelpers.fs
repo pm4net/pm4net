@@ -54,6 +54,21 @@ type OcelHelpers private () =
         |> List.groupBy (fun (_, v) -> v.OMap |> Seq.head)
         |> List.map snd
 
+    /// Create a trace for an object type in order to use it for the stable graph layout algorithm.
+    static member TraceForObjectType objType (log: OcelLog) =
+        log
+        |> OcelHelpers.OrderedTracesOfFlattenedLog
+        |> List.map (fun l -> l |> List.map snd)
+        |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
+        |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Type = objType } : InputTypes.Trace)
+
+    /// Create traces for all object types in order to use it for the stable graph layout algorithm.
+    static member AllTracesOfLog (log: OcelLog) =
+        log.ObjectTypes
+        |> Set.toList
+        |> List.map (fun t -> t |> OcelHelpers.Flatten log |> OcelHelpers.TraceForObjectType (Some t))
+        |> List.concat
+
     /// Get an attribute from an OCEL event, if it exists.
     static member TryGetAttribute attr event =
         event.VMap |> Map.tryFind attr

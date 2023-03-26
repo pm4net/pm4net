@@ -26,7 +26,6 @@
     <Compile Include="Utilities\OcelHelpers.fs" />
     <Compile Include="Visualization\Ocel\Graphviz.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelDfg.fs" />
-    <Compile Include="Algorithms\Discovery\Ocel\OcelPetriNet.fs" />
     <Compile Include="Algorithms\Layout\StableGraphLayout.fs" />
 	<Content Include="..\README.md" Pack="true" PackagePath="\">
 	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -2,7 +2,6 @@ namespace pm4net.Visualization.Ocel
 
 open System
 open pm4net.Types
-open pm4net.Types.Graphs
 open pm4net.Types.Trees
 open DotNetGraph
 open DotNetGraph.Node
@@ -11,6 +10,9 @@ open DotNetGraph.SubGraph
 open DotNetGraph.Attributes
 open DotNetGraph.Extensions
 open pm4net.Utilities
+
+open GraphTypes
+open InputTypes
 
 [<AbstractClass; Sealed>]
 type Graphviz private () =
@@ -44,31 +46,43 @@ type Graphviz private () =
             children |> List.iter (fun c -> Graphviz.addSubgraphsToGraph c subGraph)
 
     /// Create a DOT node from en Event node
-    static member private createEventNode eventNode =
+    static member private createEventNode (eventNode: EventNode<NodeInfo>) =
         let node = DotNode($"{eventNode.Name}")
-        node.SetCustomAttribute("label", $"<<B>{eventNode.Name}</B><BR/>{eventNode.Statistics.Frequency}>") |> ignore
+        node.SetCustomAttribute("label", $"<<B>{eventNode.Name}</B><BR/>{match eventNode.Info with | Some info -> info.Frequency | _ -> 0}>") |> ignore
         node.Shape <- DotNodeShapeAttribute DotNodeShape.Rectangle
         node.Style <- DotNodeStyleAttribute DotNodeStyle.Filled
         node.FillColor <-
-            match eventNode.Level with
-            | Debug | Verbose -> DotFillColorAttribute System.Drawing.Color.White
-            | Information -> DotFillColorAttribute System.Drawing.Color.LightGray
-            | Warning -> DotFillColorAttribute System.Drawing.Color.Orange
-            | Error -> DotFillColorAttribute System.Drawing.Color.Red
-            | Fatal -> DotFillColorAttribute System.Drawing.Color.DarkRed
+            match eventNode.Info with
+            | Some info ->
+                match info.Level with
+                | Some level ->
+                    match level with
+                    | Debug | Verbose -> DotFillColorAttribute System.Drawing.Color.White
+                    | Information -> DotFillColorAttribute System.Drawing.Color.LightGray
+                    | Warning -> DotFillColorAttribute System.Drawing.Color.Orange
+                    | Error -> DotFillColorAttribute System.Drawing.Color.Red
+                    | Fatal -> DotFillColorAttribute System.Drawing.Color.DarkRed
+                    | _ -> DotFillColorAttribute System.Drawing.Color.White
+                | _ -> DotFillColorAttribute System.Drawing.Color.White
             | _ -> DotFillColorAttribute System.Drawing.Color.White
         node.FontColor <-
-            match eventNode.Level with
-            | Debug | Verbose -> DotFontColorAttribute System.Drawing.Color.Black
-            | Information -> DotFontColorAttribute System.Drawing.Color.Black
-            | Warning -> DotFontColorAttribute System.Drawing.Color.Black
-            | Error -> DotFontColorAttribute System.Drawing.Color.White
-            | Fatal -> DotFontColorAttribute System.Drawing.Color.White
+            match eventNode.Info with
+            | Some info ->
+                match info.Level with
+                | Some level ->
+                    match level with
+                    | Debug | Verbose -> DotFontColorAttribute System.Drawing.Color.Black
+                    | Information -> DotFontColorAttribute System.Drawing.Color.Black
+                    | Warning -> DotFontColorAttribute System.Drawing.Color.Black
+                    | Error -> DotFontColorAttribute System.Drawing.Color.White
+                    | Fatal -> DotFontColorAttribute System.Drawing.Color.White
+                    | _ -> DotFontColorAttribute System.Drawing.Color.Black
+                | _ -> DotFontColorAttribute System.Drawing.Color.Black
             | _ -> DotFontColorAttribute System.Drawing.Color.Black
         node
 
     /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a DOT graph
-    static member OcDfg2Dot (ocdfg: DirectedGraph<Node, Edge>) (groupByNamespace: bool) =
+    static member OcDfg2Dot (ocdfg: DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>>) (groupByNamespace: bool) =
 
         /// Get a unique name for a node
         let nodeName = function
@@ -91,7 +105,7 @@ type Graphviz private () =
             ocdfg.Edges
             |> List.map (fun (_, _, e) -> e)
             |> List.groupBy (fun e -> e.Type)
-            |> List.map (fun (k, v) -> k, v |> List.maxBy (fun e -> e.Statistics.Frequency) |> fun e -> e.Statistics.Frequency)
+            |> List.map (fun (k, v) -> k, v |> List.maxBy (fun e -> e.Weight) |> fun e -> e.Weight)
             |> Map.ofList
 
         // Create DOT start and end nodes for all types
@@ -121,11 +135,11 @@ type Graphviz private () =
             ocdfg.Edges
             |> List.map (fun (a, b, e) ->
                 let edge = DotEdge(nodeName a, nodeName b)
-                edge.Label <- e.Statistics.Frequency.ToString()
-                edge.FontColor <- DotFontColorAttribute typeColors[e.Type]
-                edge.Color <- DotColorAttribute typeColors[e.Type]
-                edge.PenWidth <- DotPenWidthAttribute (Helpers.scaleToRange 1f 5f 1f (typeMaxFrequencies[e.Type] |> float32) (e.Statistics.Frequency |> float32))
-                edge.SetCustomAttribute("weight", $"{e.Statistics.Frequency}") |> ignore
+                edge.Label <- e.Weight.ToString()
+                edge.FontColor <- DotFontColorAttribute (match e.Type with | Some objType -> typeColors[objType] | _ -> Drawing.Color.Black)
+                edge.Color <- DotColorAttribute (match e.Type with | Some objType -> typeColors[objType] | _ -> Drawing.Color.Black)
+                edge.PenWidth <- DotPenWidthAttribute (Helpers.scaleToRange 1f 5f 1f (typeMaxFrequencies[e.Type] |> float32) (e.Weight |> float32))
+                edge.SetCustomAttribute("weight", $"{e.Weight}") |> ignore
                 edge
             )
         edges |> List.iter (fun e -> graph.Elements.Add e)
@@ -138,13 +152,19 @@ type Graphviz private () =
             graph
 
         /// Add DOT nodes by grouping nodes into sub-graphs based on their namespace
-        let addNodesWithNamespaces separators (graph: DotGraph) (nodes: EventNode list) (tree: ListTree<string * DotSubGraph>) : DotGraph =
+        let addNodesWithNamespaces separators (graph: DotGraph) (nodes: EventNode<NodeInfo> list) (tree: ListTree<string * DotSubGraph>) : DotGraph =
             nodes
             |> List.iter (fun n ->
-                let subGraph = n.Namespace.Split(separators) |> List.ofArray |> Graphviz.findNodeWithPath tree
-                match subGraph with
-                | Some subGraph -> Graphviz.createEventNode n |> subGraph.Elements.Add
-                | None -> ()
+                match n.Info with
+                | Some info ->
+                    match info.Namespace with
+                    | Some ns ->
+                        let subGraph = ns.Split(separators) |> List.ofArray |> Graphviz.findNodeWithPath tree
+                        match subGraph with
+                        | Some subGraph -> Graphviz.createEventNode n |> subGraph.Elements.Add
+                        | _ -> ()
+                    | _ -> ()
+                | _ -> ()
             )
 
             graph |> Graphviz.addSubgraphsToGraph tree
@@ -154,7 +174,13 @@ type Graphviz private () =
         let namespaces =
             ocdfg.Nodes
             |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
-            |> List.map (fun n -> n.Namespace)
+            |> List.map (fun n ->
+                match n.Info with
+                | Some info ->
+                    match info.Namespace with
+                    | Some ns -> ns
+                    | _ -> String.Empty
+                | _ -> String.Empty)
             |> List.distinct
 
         // Determine whether there is any namespace information, generate the DOT graph, and finally compile it

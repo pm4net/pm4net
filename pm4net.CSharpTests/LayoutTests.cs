@@ -10,8 +10,8 @@ namespace pm4net.CSharpTests
         {
             var json = File.ReadAllText("github_pm4py.jsonocel");
             var log = OcelJson.Deserialize(json, false);
-            var globalOrder = StableGraphLayout.ComputeRankGraph(log);
-            Assert.NotNull(globalOrder);
+            var globalRanking = StableGraphLayout.ComputeGlobalRanking(log);
+            Assert.NotNull(globalRanking);
         }
     }
 }
