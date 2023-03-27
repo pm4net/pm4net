@@ -14,20 +14,20 @@ type StableGraphLayout private() =
 
     /// Compute a global ranking for all object types in a log.
     static member ComputeGlobalRanking (log: OcelLog) =
-        log |> OcelHelpers.AllTracesOfLog |> Main.computeGlobalRanking
+        log |> OcelHelpers.AllTracesOfLog |> ProcessGraphLayout.ComputeGlobalRanking
 
     /// Compute a global ranking for all object types in a log.
     static member ComputeGlobalRanking (log: OCEL.CSharp.OcelLog) =
-        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> OcelHelpers.AllTracesOfLog |> Main.computeGlobalRanking
+        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> OcelHelpers.AllTracesOfLog |> ProcessGraphLayout.ComputeGlobalRanking
 
     /// Compute a global ranking for a specific object type in a log.
     static member ComputeGlobalRankingForObjectType (log: OcelLog, objType) =
-        log |> OcelHelpers.TraceForObjectType objType |> Main.computeGlobalRanking
+        log |> OcelHelpers.TraceForObjectType objType |> ProcessGraphLayout.ComputeGlobalRanking
 
     /// Compute a global ranking for a specific object type in a log.
     static member ComputeGlobalRankingForObjectType (log: OCEL.CSharp.OcelLog, objType) =
-        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> OcelHelpers.TraceForObjectType objType |> Main.computeGlobalRanking
+        log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> OcelHelpers.TraceForObjectType objType |> ProcessGraphLayout.ComputeGlobalRanking
 
     /// Compute a graph layout for a discovered sub-graph based on a previously computed global ranking of the entire graph.
     static member ComputeGraphLayout (globalRanking, discoveredModel, mergeEdgesOfSameType, maxCharsPerLine, horizontalSep, verticalSep, edgeToEdgeSep) =
-        Main.computeLayout globalRanking discoveredModel mergeEdgesOfSameType maxCharsPerLine horizontalSep verticalSep edgeToEdgeSep
+        ProcessGraphLayout.ComputeLayout globalRanking discoveredModel mergeEdgesOfSameType maxCharsPerLine horizontalSep verticalSep edgeToEdgeSep
