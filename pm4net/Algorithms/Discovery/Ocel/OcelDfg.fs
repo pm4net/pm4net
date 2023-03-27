@@ -158,20 +158,12 @@ type OcelDfg private () =
                     |> List.groupBy (fun n ->
                         match n with
                         | EventNode n ->
-                            let baseStr = nameof(EventNode)
+                            let baseStr = nameof(EventNode) + n.Name
                             match n.Info with
-                            | Some info ->
-                                let baseStr =
-                                    match info.Namespace with
-                                    | Some ns -> baseStr + ns
-                                    | _ -> baseStr
-                                match info.Level with
-                                | Some lvl -> baseStr + lvl.ToString()
-                                | _ -> baseStr
+                            | Some info -> baseStr + (Option.defaultValue "" info.Namespace) + (Option.defaultValue LogLevel.Unknown info.Level).ToString()
                             | _ -> baseStr
                         | StartNode n -> nameof(StartNode) + n
-                        | EndNode n -> nameof(EndNode) + n
-                    )
+                        | EndNode n -> nameof(EndNode) + n)
                     |> List.map (fun (_, nodes) -> nodes |> List.maxBy (fun n ->
                         match n with
                         | EventNode n ->
