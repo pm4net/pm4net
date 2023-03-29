@@ -37,7 +37,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="OCEL" Version="1.3.0" />
     <PackageReference Include="OCEL.CSharp" Version="1.3.0" />
-    <PackageReference Include="ProcessGraphLayout" Version="0.0.1-alpha.6" />
+    <PackageReference Include="ProcessGraphLayout" Version="0.0.1-alpha.8" />
   </ItemGroup>
 
   <ItemGroup>
