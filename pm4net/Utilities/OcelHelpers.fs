@@ -50,24 +50,23 @@ type OcelHelpers private () =
     /// Returns a list of traces, where each trace is a list of event ID and the actual event.
     static member OrderedTracesOfFlattenedLog (log: OcelLog) =
         log.OrderedEvents
-        |> List.ofSeq
-        |> List.groupBy (fun (_, v) -> v.OMap |> Seq.head)
-        |> List.map snd
+        |> Seq.groupBy (fun (_, v) -> v.OMap |> Seq.head)
+        |> Seq.map snd
 
     /// Create a trace for an object type in order to use it for the stable graph layout algorithm.
     static member TraceForObjectType objType (log: OcelLog) =
         log
         |> OcelHelpers.OrderedTracesOfFlattenedLog
-        |> List.map (fun l -> l |> List.map snd)
-        |> List.countBy (fun t -> t |> List.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
-        |> List.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Type = objType } : InputTypes.Trace)
+        |> Seq.map (fun l -> l |> Seq.map snd)
+        |> Seq.countBy (fun t -> t |> Seq.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
+        |> Seq.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Type = objType } : InputTypes.Trace)
 
     /// Create traces for all object types in order to use it for the stable graph layout algorithm.
     static member AllTracesOfLog (log: OcelLog) =
         log.ObjectTypes
-        |> Set.toList
-        |> List.map (fun t -> t |> OcelHelpers.Flatten log |> OcelHelpers.TraceForObjectType (Some t))
-        |> List.concat
+        |> Set.toSeq
+        |> Seq.map (fun t -> t |> OcelHelpers.Flatten log |> OcelHelpers.TraceForObjectType (Some t))
+        |> Seq.concat
 
     /// Get an attribute from an OCEL event, if it exists.
     static member TryGetAttribute attr event =
