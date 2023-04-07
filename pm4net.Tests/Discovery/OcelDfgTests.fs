@@ -29,3 +29,10 @@ module OcelDfgTests =
         let log = log.MergeDuplicateObjects()
         let dfg = Discovery.Ocel.OcelDfg.Discover(0, 0, 0, ["CorrelationId"; "Incremented"; "Now"; "StartDate"], log)
         true
+
+    [<Fact>]
+    let ``Can discover DFG from 'recruiting' log`` () =
+        let json = File.ReadAllText("recruiting.jsonocel")
+        let log = OCEL.OcelJson.deserialize true json
+        let dfg = Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
+        true
