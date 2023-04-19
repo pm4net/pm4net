@@ -28,8 +28,7 @@ type OcelHelpers private () =
                     |> Seq.filter (fun (_, o) -> o.Type = object_type)
                 match objs |> List.ofSeq with
                 | [] -> kv.Key, []
-                | objs -> kv.Key, objs |> List.map (fun (o_id, _) -> { kv.Value with OMap = [o_id] })
-            )
+                | objs -> kv.Key, objs |> List.map (fun (o_id, _) -> { kv.Value with OMap = [o_id] }))
 
         /// Collect a sequence of event id's and multiple corresponding events into a single mapping of event id's and events, appending a number to the id to make it unique (if more than 1 event for same id exists).
         let collectEventsIntoMapping events =
