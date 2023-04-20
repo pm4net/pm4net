@@ -70,7 +70,7 @@ type OcelDfg private () =
     /// <returns>An Object-Centric Directly-Follows-Graph (DFG) with the filters applied.</returns>
     static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
         // Discover the traces based on the referenced object type and discard the event ID's
-        let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Helpers.mapNestedSeq snd
+        let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Seq.map (fun (_, e) -> e |> Seq.map snd)
 
         // Step 2: Remove all cases from log having a trace with a frequency lower than minEvents
         let tracesFilteredForLength = traces |> Seq.filter (fun v -> v |> Seq.length >= minEvents)

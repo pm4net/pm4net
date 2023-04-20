@@ -50,13 +50,13 @@ type OcelHelpers private () =
     static member OrderedTracesOfFlattenedLog (log: OcelLog) =
         log.OrderedEvents
         |> Seq.groupBy (fun (_, v) -> v.OMap |> Seq.head)
-        |> Seq.map snd
+        |> Seq.map (fun (k, e) -> log.Objects[k], e)
 
     /// Create a trace for an object type in order to use it for the stable graph layout algorithm.
     static member TraceForObjectType objType (log: OcelLog) =
         log
         |> OcelHelpers.OrderedTracesOfFlattenedLog
-        |> Seq.map (fun l -> l |> Seq.map snd)
+        |> Seq.map (fun (_, l) -> l |> Seq.map snd)
         |> Seq.countBy (fun t -> t |> Seq.map (fun e -> e.Activity)) // Extract only activity name and count the occurrences of each variant/path
         |> Seq.map (fun (t, cnt) -> { Events = t; Frequency = cnt; Type = objType } : InputTypes.Trace)
 
