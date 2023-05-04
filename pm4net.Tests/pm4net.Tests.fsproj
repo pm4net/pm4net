@@ -61,6 +61,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\process-graph-layout\src\ProcessGraphLayout\ProcessGraphLayout.fsproj" />
     <ProjectReference Include="..\pm4net\pm4net.fsproj" />
   </ItemGroup>
 
