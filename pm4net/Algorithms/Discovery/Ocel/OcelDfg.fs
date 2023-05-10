@@ -56,6 +56,10 @@ type OcelDfg private () =
                 (match b.Info with | Some info -> info.Namespace = ns1 | _ -> false)
             | _ -> false)
 
+    /// Get the timestamp of the first and last event in a trace
+    static member private getFirstAndLastEventTimestamp trace =
+        trace |> Seq.head |> fun e -> e.Timestamp, trace |> Seq.last |> fun e -> e.Timestamp
+            
     /// <summary>
     /// Create an Object-Centric Directly-Follows-Graph (DFG) for a flattened log, given the object type of the flattened log and a set of filter parameters.
     /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
@@ -68,31 +72,43 @@ type OcelDfg private () =
     /// <param name="objectType">The object type after whicht the log was flattened.</param>
     /// <param name="log">An object-centric event log that was flattened for a specific object type.</param>
     /// <returns>An Object-Centric Directly-Follows-Graph (DFG) with the filters applied.</returns>
-    static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
+    static member DiscoverForSingleType(filter, objectType, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
         // Discover the traces based on the referenced object type and discard the event ID's
         let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Seq.map (fun (_, e) -> e |> Seq.map snd)
 
         // Step 2: Remove all cases from log having a trace with a frequency lower than minEvents
-        let tracesFilteredForLength = traces |> Seq.filter (fun v -> v |> Seq.length >= minEvents)
+        let tracesFilteredForLength = traces |> Seq.filter (fun v -> v |> Seq.length >= filter.MinEvents)
+
+        // Additional step: Filter for timeframe
+        let tracesFilteredForTimeframe =
+            match filter.Timeframe with
+            | Some tf ->
+                tracesFilteredForLength |> Seq.choose (fun t ->
+                    let f, l = OcelDfg.getFirstAndLastEventTimestamp t
+                    match tf.KeepCases with
+                    | ContainedInTimeframe -> if f > tf.From && l < tf.To then Some t else None
+                    // If it starts before, the last one must be in the timeframe or after it. If it starts within the timeframe, all is good.
+                    | IntersectingTimeframe -> if (f < tf.From && l >= tf.From) || (f >= tf.From && f <= tf.To) then Some t else None
+                    | StartedInTimeframe -> if f >= tf.From && f <= tf.To then Some t else None
+                    | CompletedInTimeframe -> if l >= tf.From && l <= tf.To then Some t else None
+                    | TrimToTimeframe -> t |> Seq.filter (fun e -> e.Timestamp >= tf.From && e.Timestamp <= tf.To) |> fun t -> if t |> Seq.isEmpty then None else Some t)
+            | None -> tracesFilteredForLength
 
         // Step 3: Remove all events with a frequency lower than minOccurrences
-        let noOfEvents = OcelDfg.noOfEventsWithCase tracesFilteredForLength
-        let tracesFilteredForFrequency = tracesFilteredForLength |> Seq.map (fun v -> v |> Seq.filter (fun e -> Map.find e.Activity noOfEvents >= minOccurrences))
+        let noOfEvents = OcelDfg.noOfEventsWithCase tracesFilteredForTimeframe
+        let tracesFilteredForFrequency = tracesFilteredForTimeframe |> Seq.map (fun v -> v |> Seq.filter (fun e -> Map.find e.Activity noOfEvents >= filter.MinOccurrences))
 
         // Step 4: Add a node for each activity remaining in the filtered event log
         let groupedByActivityNamespace = traces |> Seq.collect id |> Seq.groupBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
         let nodes = groupedByActivityNamespace |> Seq.map (
-            fun ((act, ns), events) -> EventNode(
-                {
+            fun ((act, ns), events) -> EventNode({
                     Name = act
                     Info = Some {
                         Frequency = events |> Seq.length
                         Namespace = ns
                         Level = events |> Seq.toList |> Helpers.mostCommonValue (fun e -> OcelHelpers.GetLogLevel e)
                     }
-                }
-            )
-        )
+                }))
         
         // Step 5: Connect the nodes that meet the minSuccessions treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= minSuccessions
         let edges =
@@ -117,7 +133,7 @@ type OcelDfg private () =
                         })
                     | None -> [(aNode, bNode, { Weight = 1; Type = Some objectType; Info = Some { Durations = [OcelDfg.durationBetweenEvents v] } })] |> Seq.append s))
             // Filter out edges that do not satisfy minimum threshold
-            |> Seq.filter (fun (_, _, e) -> e.Weight >= minSuccessions)
+            |> Seq.filter (fun (_, _, e) -> e.Weight >= filter.MinSuccessions)
 
         // Find and insert start and stop nodes and their respective edges
         let starts = tracesFilteredForFrequency |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.head) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
@@ -145,12 +161,12 @@ type OcelDfg private () =
     /// <param name="includedTypes">A list of strings with the object types to include in the DFG.</param>
     /// <param name="log">An object-centric event log.</param>
     /// <returns>An Object-Centric Directly-Follows-Graph (DFG) with the filters applied.</returns>
-    static member Discover(minEvents, minOccurrences, minSuccessions, includedTypes, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
+    static member Discover(filter, includedTypes, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
         log.ObjectTypes
         |> Set.filter (fun t -> includedTypes |> List.contains t) // Only include object types from the list in the parameters
         |> Seq.map (fun t -> t, OcelHelpers.Flatten log t) // Flatten the log based on every object type
         |> Map.ofSeq // Create a map of object types to flattened log
-        |> Map.map (fun objType v -> OcelDfg.DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objType, v)) // Discover DFG for each type individually
+        |> Map.map (fun objType log -> OcelDfg.DiscoverForSingleType(filter, objType, log)) // Discover DFG for each type individually
         |> Map.fold (fun state _ value -> // Merge the DFG's for each type together
             { state with
                 Nodes =
@@ -178,8 +194,8 @@ type OcelDfg private () =
 
     (* --- Overloads for C# OCEL log type --- *)
 
-    static member DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node<_>, Edge<_>> =
-        OcelDfg.DiscoverForSingleType(minEvents, minOccurrences, minSuccessions, objectType, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)
+    static member DiscoverForSingleType(filter, objectType, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node<_>, Edge<_>> =
+        OcelDfg.DiscoverForSingleType(filter, objectType, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)
 
-    static member Discover(minEvents, minOccurrences, minSuccessions, includedTypes : string seq, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node<_>, Edge<_>> =
-        OcelDfg.Discover(minEvents, minOccurrences, minSuccessions, includedTypes |> List.ofSeq, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)
+    static member Discover(filter, includedTypes : string seq, log: OCEL.CSharp.OcelLog) : DirectedGraph<Node<_>, Edge<_>> =
+        OcelDfg.Discover(filter, includedTypes |> List.ofSeq, OCEL.CSharp.FSharpConverters.ToFSharpOcelLog log)
