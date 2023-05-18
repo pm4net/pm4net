@@ -107,6 +107,8 @@ type OcelDfg private () =
                         Frequency = events |> Seq.length
                         Namespace = ns
                         Level = events |> Seq.toList |> Helpers.mostCommonValue (fun e -> OcelHelpers.GetLogLevel e)
+                        Attributes = events |> Seq.head |> fun e -> e.VMap
+                        Objects = events |> Seq.head |> fun e -> e.OMap |> List.map (fun o -> log.Objects[o])
                     }
                 }))
         
