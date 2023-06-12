@@ -29,5 +29,5 @@ type StableGraphLayout private() =
         log |> OCEL.CSharp.FSharpConverters.ToFSharpOcelLog |> OcelHelpers.TraceForObjectType objType |> ProcessGraphLayout.Default.ComputeGlobalRanking
 
     /// Compute a graph layout for a discovered sub-graph based on a previously computed global ranking of the entire graph.
-    static member ComputeGraphLayout (globalRanking, discoveredModel, mergeEdgesOfSameType, maxCharsPerLine, horizontalSep, verticalSep, edgeToEdgeSep) =
-        ProcessGraphLayout.Default.ComputeLayout globalRanking discoveredModel mergeEdgesOfSameType maxCharsPerLine horizontalSep verticalSep edgeToEdgeSep
+    static member ComputeGraphLayout (globalRanking, discoveredModel, mergeEdgesOfSameType, maxCharsPerLine, horizontalSep) =
+        ProcessGraphLayout.Default.ComputeLayout globalRanking discoveredModel mergeEdgesOfSameType maxCharsPerLine horizontalSep
