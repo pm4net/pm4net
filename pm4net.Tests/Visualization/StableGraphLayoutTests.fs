@@ -46,7 +46,7 @@ module ``Stable graph layout tests`` =
         let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(filter, ["CorrelationId"], log)
 
         let globalRanking = StableGraphLayout.ComputeGlobalRanking log
-        let layout = StableGraphLayout.ComputeGraphLayout(globalRanking, dfg, true, 32, 2f, 2f, 0.5f)
+        let layout = StableGraphLayout.ComputeGraphLayout(globalRanking, dfg, true, 32, 2f, 2f)
 
         layout |> Assert.NotNull
 
@@ -59,7 +59,7 @@ module ``Stable graph layout tests`` =
         //let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(0, 0, 0, log.ObjectTypes |> Set.toList, log)
 
         let globalRanking = StableGraphLayout.ComputeGlobalRanking log
-        let layout = StableGraphLayout.ComputeGraphLayout(globalRanking, dfg, true, 32, 2f, 2f, 0.5f)
+        let layout = StableGraphLayout.ComputeGraphLayout(globalRanking, dfg, true, 32, 2f, 2f)
 
         layout |> Assert.NotNull
 
@@ -71,6 +71,6 @@ module ``Stable graph layout tests`` =
         let dfg = pm4net.Algorithms.Discovery.Ocel.OcelDfg.Discover(filter, log.ObjectTypes |> Set.toList, log)
 
         let globalRanking = StableGraphLayout.ComputeGlobalRanking log
-        let layout = StableGraphLayout.ComputeGraphLayout(globalRanking, dfg, true, 32, 2f, 2f, 0.5f)
+        let layout = StableGraphLayout.ComputeGraphLayout(globalRanking, dfg, true, 32, 2f, 2f)
 
         layout |> Assert.NotNull
