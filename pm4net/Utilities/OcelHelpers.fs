@@ -58,6 +58,7 @@ type OcelHelpers private () =
         |> OcelHelpers.OrderedTracesOfFlattenedLog
         |> Seq.map (fun (_, l) -> l |> Seq.map (fun (_, e) -> e.Activity) |> Seq.toList)
         |> Seq.countBy id
+        |> Seq.distinctBy fst
         |> Seq.map (fun (t, cnt) -> { Events = t |> List.toSeq; Frequency = cnt; Type = objType } : InputTypes.Trace)
 
     /// Create traces for all object types in order to use it for the stable graph layout algorithm.
