@@ -111,31 +111,23 @@ type OcelDfg private () =
                         Objects = events |> Seq.head |> fun e -> e.OMap |> List.map (fun o -> log.Objects[o])
                     }
                 }))
-        
+
+        // Alternate version in progress
         // Step 5: Connect the nodes that meet the minSuccessions treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= minSuccessions
+        let directlyFollowing =
+            tracesFilteredForFrequency
+            |> Seq.collect Seq.pairwise
+            |> Seq.toList
+            |> List.groupBy (fun (a, b) -> (a.Activity, OcelHelpers.GetNamespace a), (b.Activity, OcelHelpers.GetNamespace b))
+
         let edges =
-            (([]: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) seq), tracesFilteredForFrequency)
-            ||> Seq.fold (fun edges trace ->
-                // Get pairs of events that directly follow each other
-                let directlyFollowing = trace |> Seq.pairwise
-                // Add or change counter of edge in mapping
-                (edges, directlyFollowing) ||> Seq.fold (fun s v ->
-                    let aNode = OcelDfg.findNode (fst v).Activity (fst v |> OcelHelpers.GetNamespace) nodes
-                    let bNode = OcelDfg.findNode (snd v).Activity (snd v |> OcelHelpers.GetNamespace) nodes
-                    match s |> Seq.tryFindIndex (fun (a, b, _) -> a = aNode && b = bNode) with
-                    | Some i ->
-                        let (a, b, edge) = s |> Seq.item i
-                        s |> Seq.updateAt i (a, b,
-                        { edge with
-                            Weight = edge.Weight + 1
-                            Info =
-                                match edge.Info with
-                                | Some edgeInfo -> Some { edgeInfo with Durations = OcelDfg.durationBetweenEvents v :: edgeInfo.Durations }
-                                | _ -> None
-                        })
-                    | None -> [(aNode, bNode, { Weight = 1; Type = Some objectType; Info = Some { Durations = [OcelDfg.durationBetweenEvents v] } })] |> Seq.append s))
-            // Filter out edges that do not satisfy minimum threshold
-            |> Seq.filter (fun (_, _, e) -> e.Weight >= filter.MinSuccessions)
+            (([]: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) list), directlyFollowing)
+            ||> List.fold (fun edges (((aAct, aNs), (bAct, bNs)), trace) ->
+                let aNode = nodes |> OcelDfg.findNode aAct aNs
+                let bNode = nodes |> OcelDfg.findNode bAct bNs
+                let durations = trace |> List.map OcelDfg.durationBetweenEvents
+                (aNode, bNode, { Weight = trace.Length; Type = Some objectType; Info = Some { Durations = durations } }) :: edges)
+            |> Seq.filter (fun (_, _, e) -> e.Weight >= filter.MinSuccessions) // Filter out edges that do not satisfy minimum threshold
 
         // Find and insert start and stop nodes and their respective edges
         let starts = tracesFilteredForFrequency |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.head) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
