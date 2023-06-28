@@ -42,6 +42,7 @@ type OcelHelpers private () =
             |> Map.ofSeq
 
         // Return the same log, with the events replaced by the flattened events
+        // TODO: Possibly discard objects that no longer have a reference by any object
         { log with Events = (log, objectType) ||> flattenEventsByObjectType |> collectEventsIntoMapping}
 
     /// Extract the different traces of a flattened OCEL log, where each event has exactly one object reference.
