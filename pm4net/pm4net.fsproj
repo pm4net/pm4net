@@ -19,8 +19,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Types\Filters.fs" />
     <Compile Include="Types\Common.fs" />
+    <Compile Include="Types\Filters.fs" />
     <Compile Include="Types\Trees.fs" />
     <Compile Include="Types\DirectlyFollowsGraph.fs" />
     <Compile Include="Utilities\Helpers.fs" />

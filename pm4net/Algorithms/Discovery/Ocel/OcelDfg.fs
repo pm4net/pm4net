@@ -76,8 +76,16 @@ type OcelDfg private () =
         // Discover the traces based on the referenced object type and discard the event ID's
         let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Seq.map (fun (_, e) -> e |> Seq.map snd)
 
+        // Additional step: Filter for log level
+        let tracesFilteredForLogLevel = traces |> Seq.choose (fun t ->
+            let filtered = t |> Seq.filter (fun e ->
+                match OcelHelpers.GetLogLevel e with
+                | None -> filter.IncludedLogLevels |> List.contains LogLevel.Unknown // If the event doesn't have a log level, the Unknown value needs to be enabled
+                | Some l -> filter.IncludedLogLevels |> List.contains l)
+            if filtered |> Seq.isEmpty then None else Some filtered)
+
         // Step 2: Remove all cases from log having a trace with a frequency lower than minEvents
-        let tracesFilteredForLength = traces |> Seq.filter (fun v -> v |> Seq.length >= filter.MinEvents)
+        let tracesFilteredForLength = tracesFilteredForLogLevel |> Seq.filter (fun v -> v |> Seq.length >= filter.MinEvents)
 
         // Additional step: Filter for timeframe
         let tracesFilteredForTimeframe =

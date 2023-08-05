@@ -20,4 +20,5 @@ type OcDfgFilter = {
     MinOccurrences: int
     MinSuccessions: int
     Timeframe: TimeframeFilter option
+    IncludedLogLevels: LogLevel list
 }
