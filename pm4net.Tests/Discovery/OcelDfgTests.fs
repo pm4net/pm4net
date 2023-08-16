@@ -14,6 +14,7 @@ module OcelDfgTests =
         MinOccurrences = 0
         MinSuccessions = 0
         Timeframe = None
+        IncludedLogLevels = []
     }
 
     let timeframeFilter = {

@@ -13,6 +13,7 @@ module ``Stable graph layout tests`` =
         MinOccurrences = 0
         MinSuccessions = 0
         Timeframe = None
+        IncludedLogLevels = []
     }
 
     [<Fact>]
