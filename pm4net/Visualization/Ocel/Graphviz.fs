@@ -11,9 +11,6 @@ open DotNetGraph.Attributes
 open DotNetGraph.Extensions
 open pm4net.Utilities
 
-open GraphTypes
-open InputTypes
-
 [<AbstractClass; Sealed>]
 type Graphviz private () =
 

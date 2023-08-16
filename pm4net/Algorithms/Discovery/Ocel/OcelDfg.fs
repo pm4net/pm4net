@@ -1,7 +1,5 @@
 namespace pm4net.Algorithms.Discovery.Ocel
 
-open GraphTypes
-open InputTypes
 open OCEL.Types
 open pm4net.Types
 open pm4net.Utilities
