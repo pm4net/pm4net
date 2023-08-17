@@ -34,26 +34,6 @@ type OcelDfg private () =
     static member private durationBetweenEvents (e1, e2) =
         e2.Timestamp - e1.Timestamp
 
-    /// Find an event node in a list of nodes by its name and namespace
-    static member private findNode name ns (nodes: Node<NodeInfo> seq) =
-        nodes
-        |> Seq.find (fun n ->
-            match n with
-            | EventNode e -> e.Name = name && (match e.Info with | Some info -> info.Namespace = ns | _ -> false)
-            | _ -> false)
-
-    /// Find an edge in a list of edges by its name and namespace of start and end, and the object type
-    static member private findEdge (name1, ns1) (name2, ns2) (edges: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) seq) =
-        edges
-        |> Seq.find (fun (a, b, _) ->
-            match a, b with
-            | EventNode a, EventNode b ->
-                a.Name = name1 &&
-                b.Name = name2 &&
-                (match a.Info with | Some info -> info.Namespace = ns1 | _ -> false) &&
-                (match b.Info with | Some info -> info.Namespace = ns1 | _ -> false)
-            | _ -> false)
-
     /// Get the timestamp of the first and last event in a trace
     static member private getFirstAndLastEventTimestamp trace =
         trace |> Seq.head |> fun e -> e.Timestamp, trace |> Seq.last |> fun e -> e.Timestamp
@@ -106,8 +86,12 @@ type OcelDfg private () =
 
         // Step 4: Add a node for each activity remaining in the filtered event log
         let groupedByActivityNamespace = tracesFilteredForFrequency |> Seq.collect id |> Seq.groupBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
-        let nodes = groupedByActivityNamespace |> Seq.map (
-            fun ((act, ns), events) -> EventNode({
+
+        // Create map of nodes with activity and optional namespace as key, for efficient lookup down below when creating edges
+        let nodes =
+            groupedByActivityNamespace
+            |> Seq.map (fun ((act, ns), events) ->
+                (act, ns), EventNode({
                     Name = act
                     Info = Some {
                         Frequency = events |> Seq.length
@@ -117,22 +101,22 @@ type OcelDfg private () =
                         Objects = events |> Seq.head |> fun e -> e.OMap |> List.map (fun o -> log.Objects[o])
                     }
                 }))
+            |> Map.ofSeq
 
         // Alternate version in progress
         // Step 5: Connect the nodes that meet the minSuccessions treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= minSuccessions
         let directlyFollowing =
             tracesFilteredForFrequency
             |> Seq.collect Seq.pairwise
-            |> Seq.toList
-            |> List.groupBy (fun (a, b) -> (a.Activity, OcelHelpers.GetNamespace a), (b.Activity, OcelHelpers.GetNamespace b))
+            |> Seq.groupBy (fun (a, b) -> (a.Activity, OcelHelpers.GetNamespace a), (b.Activity, OcelHelpers.GetNamespace b))
 
         let edges =
             (([]: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) list), directlyFollowing)
-            ||> List.fold (fun edges (((aAct, aNs), (bAct, bNs)), trace) ->
-                let aNode = nodes |> OcelDfg.findNode aAct aNs
-                let bNode = nodes |> OcelDfg.findNode bAct bNs
-                let durations = trace |> List.map OcelDfg.durationBetweenEvents
-                (aNode, bNode, { Weight = trace.Length; Type = Some objectType; Info = Some { Durations = durations } }) :: edges)
+            ||> Seq.fold (fun edges (((aAct, aNs), (bAct, bNs)), trace) ->
+                let aNode = nodes[aAct, aNs]
+                let bNode = nodes[bAct, bNs]
+                let durations = trace |> Seq.map OcelDfg.durationBetweenEvents
+                (aNode, bNode, { Weight = trace |> Seq.length; Type = Some objectType; Info = Some { Durations = durations |> Seq.toList } }) :: edges)
             |> Seq.filter (fun (_, _, e) -> e.Weight >= filter.MinSuccessions) // Filter out edges that do not satisfy minimum threshold
 
         // Find and insert start and stop nodes and their respective edges
@@ -140,14 +124,15 @@ type OcelDfg private () =
         let ends = tracesFilteredForFrequency |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.last) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
         let startNode = StartNode(objectType)
         let endNode = EndNode(objectType)
-        let nodes = startNode :: endNode :: (nodes |> Seq.toList)
+        let nodes = nodes |> Map.add ($"{Constants.objectTypeStartNode}{objectType}", None) startNode
+        let nodes = nodes |> Map.add ($"{Constants.objectTypeEndNode}{objectType}", None) endNode
         let edges =
             edges
-            |> Seq.append (starts |> Seq.map (fun ((name, ns), count) -> (startNode, nodes |> OcelDfg.findNode name ns, { Weight = count; Type = Some objectType; Info = None }))) // Connect all start nodes
-            |> Seq.append (ends |> Seq.map (fun ((name, ns), count) -> (nodes |> OcelDfg.findNode name ns, endNode, { Weight = count; Type = Some objectType; Info = None }))) // Connect all end nodes
+            |> Seq.append (starts |> Seq.map (fun ((name, ns), count) -> (startNode, nodes[name, ns], { Weight = count; Type = Some objectType; Info = None }))) // Connect all start nodes
+            |> Seq.append (ends |> Seq.map (fun ((name, ns), count) -> (nodes[name, ns], endNode, { Weight = count; Type = Some objectType; Info = None }))) // Connect all end nodes
 
         // Return a directed graph with the discovered nodes and edges
-        { Nodes = nodes; Edges = edges |> Seq.toList }
+        { Nodes = nodes |> Map.values |> Seq.toList; Edges = edges |> Seq.toList }
 
     /// <summary>
     /// Create an Object-Centric Directly-Follows-Graph (DFG) for a log, given a set of filter parameters.
