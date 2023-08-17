@@ -23,6 +23,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{B508
 		Samples\minimal.jsonocel = Samples\minimal.jsonocel
 		Samples\minimal.xmlocel = Samples\minimal.xmlocel
 		Samples\recruiting.jsonocel = Samples\recruiting.jsonocel
+		Samples\windows_events.jsonocel = Samples\windows_events.jsonocel
 	EndProjectSection
 EndProject
 Global

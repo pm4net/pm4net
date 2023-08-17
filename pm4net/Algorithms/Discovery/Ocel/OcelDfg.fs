@@ -105,7 +105,7 @@ type OcelDfg private () =
         let tracesFilteredForFrequency = tracesFilteredForTimeframe |> Seq.map (fun v -> v |> Seq.filter (fun e -> Map.find e.Activity noOfEvents >= filter.MinOccurrences))
 
         // Step 4: Add a node for each activity remaining in the filtered event log
-        let groupedByActivityNamespace = traces |> Seq.collect id |> Seq.groupBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
+        let groupedByActivityNamespace = tracesFilteredForFrequency |> Seq.collect id |> Seq.groupBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
         let nodes = groupedByActivityNamespace |> Seq.map (
             fun ((act, ns), events) -> EventNode({
                     Name = act
@@ -164,10 +164,10 @@ type OcelDfg private () =
     static member Discover(filter, includedTypes, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
         log.ObjectTypes
         |> Set.filter (fun t -> includedTypes |> List.contains t) // Only include object types from the list in the parameters
-        |> Seq.map (fun t -> t, OcelHelpers.Flatten log t) // Flatten the log based on every object type
-        |> Map.ofSeq // Create a map of object types to flattened log
-        |> Map.map (fun objType log -> OcelDfg.DiscoverForSingleType(filter, objType, log)) // Discover DFG for each type individually
-        |> Map.fold (fun state _ value -> // Merge the DFG's for each type together
+        |> Seq.map (fun t ->
+            let flattened = OcelHelpers.Flatten log t
+            t, OcelDfg.DiscoverForSingleType(filter, t, flattened)) // Flatten the log based on every object type and discover a model for each
+        |> Seq.fold (fun state (_, value) ->
             { state with
                 Nodes =
                     List.append state.Nodes value.Nodes
@@ -190,7 +190,7 @@ type OcelDfg private () =
                     ))
                 Edges = List.append state.Edges value.Edges
             }
-        ) { Nodes = []; Edges = [] } 
+        ) { Nodes = []; Edges = [] }
 
     (* --- Overloads for C# OCEL log type --- *)
 

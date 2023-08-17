@@ -14,7 +14,7 @@ module OcelDfgTests =
         MinOccurrences = 0
         MinSuccessions = 0
         Timeframe = None
-        IncludedLogLevels = []
+        IncludedLogLevels = [ LogLevel.Unknown; LogLevel.Verbose; LogLevel.Debug; LogLevel.Information; LogLevel.Warning; LogLevel.Error; LogLevel.Fatal ]
     }
 
     let timeframeFilter = {
@@ -58,6 +58,13 @@ module OcelDfgTests =
     [<Fact>]
     let ``Can discover DFG from 'recruiting' log`` () =
         let json = File.ReadAllText("recruiting.jsonocel")
+        let log = OCEL.OcelJson.deserialize true json
+        let dfg = Discovery.Ocel.OcelDfg.Discover(filter, log.ObjectTypes |> Set.toList, log)
+        true
+
+    [<Fact>]
+    let ``Can discover DFG from 'windows_events' log`` () =
+        let json = File.ReadAllText("windows_events.jsonocel")
         let log = OCEL.OcelJson.deserialize true json
         let dfg = Discovery.Ocel.OcelDfg.Discover(filter, log.ObjectTypes |> Set.toList, log)
         true
