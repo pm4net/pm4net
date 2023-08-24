@@ -1,6 +1,7 @@
 namespace pm4net.Tests
 
 open pm4net.Types
+open pm4net.Types.Trees
 open pm4net.Algorithms
 
 open System
@@ -25,6 +26,17 @@ module OcelDfgTests =
                 To = DateTimeOffset.Parse("2020-01-01")
                 KeepCases = ContainedInTimeframe
             }
+    }
+
+    let namespaceFilter = {
+        filter with
+            IncludedNamespaces = ListTree.Node("", [
+                ListTree.Node("BlazorExample", [
+                    ListTree.Node("Pages", [
+                        ListTree.Node("*", [])
+                    ])
+                ])
+            ]) |> Some
     }
 
     [<Fact>]
@@ -54,6 +66,14 @@ module OcelDfgTests =
         let log = OCEL.OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
         let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["CorrelationId"; "Incremented"; "Now"; "StartDate"], log)
+        true
+
+    [<Fact>]
+    let ``Can discover DFG from 'blazor-logs' log with namespace filter`` () =
+        let json = File.ReadAllText("blazor-logs.jsonocel")
+        let log = OCEL.OcelJson.deserialize true json
+        let log = log.MergeDuplicateObjects()
+        let dfg = Discovery.Ocel.OcelDfg.Discover(namespaceFilter, ["CorrelationId"; "Incremented"; "Now"; "StartDate"], log)
         true
 
     [<Fact>]

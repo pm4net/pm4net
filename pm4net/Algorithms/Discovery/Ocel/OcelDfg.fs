@@ -1,7 +1,9 @@
 namespace pm4net.Algorithms.Discovery.Ocel
 
+open System
 open OCEL.Types
 open pm4net.Types
+open pm4net.Types.Trees
 open pm4net.Utilities
 
 [<AbstractClass; Sealed>]
@@ -30,6 +32,31 @@ type OcelDfg private () =
             )
         )
 
+    /// Determine whether a namespace string is inside of a namespace tree
+    static member private isNamespaceInTree (ns: string) (tree: ListTree<string>) =
+
+        /// Determine whether a list of string components is in a given list tree
+        let rec isInTree cmps tree =
+            match cmps with
+            | [] -> true
+            | cmp :: tail ->
+                // Find the correct branch of the current level of the tree, if it exists
+                let branch =
+                    match tree with
+                    | Node(_, children) ->
+                        children
+                        |> List.tryFind (fun c ->
+                            match c with
+                            | Node(n, _) -> n = cmp || n = "*") // Wildcard means that any sub-namespace is allowed
+
+                // Repeat procedure until no more components left (positive outcome) or no matching branches are left (negative outcome)
+                match branch with
+                | Some branch -> isInTree tail branch
+                | None -> false
+
+        let nsComponents = ns.Split('.') |> Array.filter (fun i -> i <> String.Empty) |> List.ofArray
+        isInTree nsComponents tree
+
     /// Calcualte the duration between two events
     static member private durationBetweenEvents (e1, e2) =
         e2.Timestamp - e1.Timestamp
@@ -43,7 +70,7 @@ type OcelDfg private () =
         // Start by discovering the traces based on the referenced object type and discard the event ID's
         let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Seq.map (fun (_, e) -> e |> Seq.map snd)
 
-        // Filter for log levels
+        // Additional step: Filter for log levels
         let tracesFilteredForLogLevel = traces |> Seq.choose (fun t ->
             let filtered = t |> Seq.filter (fun e ->
                 match OcelHelpers.GetLogLevel e with
@@ -52,14 +79,11 @@ type OcelDfg private () =
                 | Some l -> filter.IncludedLogLevels |> List.contains l)
             if filtered |> Seq.isEmpty then None else Some filtered)
 
-        // Step 2: Remove all cases from log having a trace with a frequency lower than minEvents
-        let tracesFilteredForLength = tracesFilteredForLogLevel |> Seq.filter (fun v -> v |> Seq.length >= filter.MinEvents)
-
         // Additional step: Filter for timeframe
         let tracesFilteredForTimeframe =
             match filter.Timeframe with
             | Some tf ->
-                tracesFilteredForLength |> Seq.choose (fun t ->
+                tracesFilteredForLogLevel |> Seq.choose (fun t ->
                     let f, l = OcelDfg.getFirstAndLastEventTimestamp t
                     match tf.KeepCases with
                     | ContainedInTimeframe -> if f > tf.From && l < tf.To then Some t else None
@@ -68,11 +92,26 @@ type OcelDfg private () =
                     | StartedInTimeframe -> if f >= tf.From && f <= tf.To then Some t else None
                     | CompletedInTimeframe -> if l >= tf.From && l <= tf.To then Some t else None
                     | TrimToTimeframe -> t |> Seq.filter (fun e -> e.Timestamp >= tf.From && e.Timestamp <= tf.To) |> fun t -> if t |> Seq.isEmpty then None else Some t)
-            | None -> tracesFilteredForLength
+            | None -> tracesFilteredForLogLevel
+
+        // Additional step: Filter for namespaces
+        let tracesFilteredForNamespaces =
+            match filter.IncludedNamespaces with
+            | Some ns ->
+                tracesFilteredForTimeframe |> Seq.choose (fun t ->
+                    let filtered = t |> Seq.filter (fun e ->
+                        match OcelHelpers.GetNamespace e with
+                        | Some eNs -> ns |> OcelDfg.isNamespaceInTree eNs
+                        | None -> true) // Always allow events without namespace through
+                    if filtered |> Seq.isEmpty then None else Some filtered)
+            | None -> tracesFilteredForTimeframe
+
+        // Step 2: Remove all cases from log having a trace with a frequency lower than minEvents
+        let tracesFilteredForLength = tracesFilteredForNamespaces |> Seq.filter (fun v -> v |> Seq.length >= filter.MinEvents)
 
         // Step 3: Remove all events with a frequency lower than minOccurrences
-        let noOfEvents = OcelDfg.noOfEventsWithCase tracesFilteredForTimeframe
-        let tracesFilteredForFrequency = tracesFilteredForTimeframe |> Seq.map (fun v -> v |> Seq.filter (fun e -> Map.find e.Activity noOfEvents >= filter.MinOccurrences))
+        let noOfEvents = OcelDfg.noOfEventsWithCase tracesFilteredForLength
+        let tracesFilteredForFrequency = tracesFilteredForLength |> Seq.map (fun v -> v |> Seq.filter (fun e -> Map.find e.Activity noOfEvents >= filter.MinOccurrences))
 
         tracesFilteredForFrequency
             
