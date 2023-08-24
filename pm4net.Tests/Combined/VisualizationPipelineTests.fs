@@ -1,6 +1,7 @@
 namespace pm4net.Tests
 
 open pm4net.Types
+open pm4net.Types.Trees
 open pm4net.Algorithms
 open pm4net.Visualization.Ocel
 
@@ -15,8 +16,19 @@ module VisualizationPipelineTests =
         MinOccurrences = 0
         MinSuccessions = 0
         Timeframe = None
-        IncludedLogLevels = []
+        IncludedLogLevels = [ LogLevel.Unknown; LogLevel.Verbose; LogLevel.Debug; LogLevel.Information; LogLevel.Warning; LogLevel.Error; LogLevel.Fatal ]
         IncludedNamespaces = None
+    }
+
+    let namespaceFilter = {
+        filter with
+            IncludedNamespaces = ListTree.Node("", [
+                ListTree.Node("BlazorExample", [
+                    ListTree.Node("Pages", [
+                        ListTree.Node("*", [])
+                    ])
+                ])
+            ]) |> Some
     }
 
     [<Fact>]
@@ -41,6 +53,15 @@ module VisualizationPipelineTests =
         let log = OCEL.OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
         let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["CorrelationId"; "StartDate"; "Now"; "Incremented"], log)
+        let dot = Graphviz.OcDfg2Dot dfg false
+        dot |> String.IsNullOrWhiteSpace |> Assert.False
+
+    [<Fact>]
+    let ``Can discover DFG from 'blazor-logs' log with namespace filter and generate DOT graph`` () =
+        let json = File.ReadAllText("blazor-logs.jsonocel")
+        let log = OCEL.OcelJson.deserialize true json
+        let log = log.MergeDuplicateObjects()
+        let dfg = Discovery.Ocel.OcelDfg.Discover(namespaceFilter, ["CorrelationId"; "StartDate"; "Now"; "Incremented"], log)
         let dot = Graphviz.OcDfg2Dot dfg false
         dot |> String.IsNullOrWhiteSpace |> Assert.False
 
