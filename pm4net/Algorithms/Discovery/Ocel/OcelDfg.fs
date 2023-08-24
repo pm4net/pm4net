@@ -47,12 +47,16 @@ type OcelDfg private () =
                         children
                         |> List.tryFind (fun c ->
                             match c with
-                            | Node(n, _) -> n = cmp || n = "*") // Wildcard means that any sub-namespace is allowed
+                            | Node(n, _) -> n = cmp)
 
                 // Repeat procedure until no more components left (positive outcome) or no matching branches are left (negative outcome)
                 match branch with
                 | Some branch -> isInTree tail branch
-                | None -> false
+                | None ->
+                    // Check if the tree has exactly one child with a wildcard, in which case all remaining components are allowed
+                    match match tree with | Node(_, c) -> c |> List.tryExactlyOne with
+                    | Some(Node(n, _)) -> n = "*"
+                    | None -> false
 
         let nsComponents = ns.Split('.') |> Array.filter (fun i -> i <> String.Empty) |> List.ofArray
         isInTree nsComponents tree
