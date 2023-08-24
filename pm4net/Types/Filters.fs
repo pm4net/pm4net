@@ -1,6 +1,7 @@
 namespace pm4net.Types
 
 open System
+open pm4net.Types.Trees
 
 type KeepCases =
     | ContainedInTimeframe
@@ -21,4 +22,5 @@ type OcDfgFilter = {
     MinSuccessions: int
     Timeframe: TimeframeFilter option
     IncludedLogLevels: LogLevel list
+    IncludedNamespaces: ListTree<string> option
 }

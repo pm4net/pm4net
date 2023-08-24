@@ -16,6 +16,7 @@ module VisualizationPipelineTests =
         MinSuccessions = 0
         Timeframe = None
         IncludedLogLevels = []
+        IncludedNamespaces = None
     }
 
     [<Fact>]

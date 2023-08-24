@@ -15,6 +15,7 @@ module OcelDfgTests =
         MinSuccessions = 0
         Timeframe = None
         IncludedLogLevels = [ LogLevel.Unknown; LogLevel.Verbose; LogLevel.Debug; LogLevel.Information; LogLevel.Warning; LogLevel.Error; LogLevel.Fatal ]
+        IncludedNamespaces = None
     }
 
     let timeframeFilter = {

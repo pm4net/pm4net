@@ -37,28 +37,18 @@ type OcelDfg private () =
     /// Get the timestamp of the first and last event in a trace
     static member private getFirstAndLastEventTimestamp trace =
         trace |> Seq.head |> fun e -> e.Timestamp, trace |> Seq.last |> fun e -> e.Timestamp
-            
-    /// <summary>
-    /// Create an Object-Centric Directly-Follows-Graph (DFG) for a flattened log, given the object type of the flattened log and a set of filter parameters.
-    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
-    /// Based on <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1101.pdf">A practitioner's guide to process mining: Limitations of the directly-follows graph</see> and
-    /// <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1056.pdf">Object-Centric Process Mining: Dealing with Divergence and Convergence in Event Data.</see>
-    /// </summary>
-    /// <param name="minEvents">Minimal number of events in a trace for it to be included.</param>
-    /// <param name="minOccurrences">Minimal number of global occurences for events to be kept in a trace.</param>
-    /// <param name="minSuccessions">Minimal number of direct successions for a relationship to be included in the DFG.</param>
-    /// <param name="objectType">The object type after whicht the log was flattened.</param>
-    /// <param name="log">An object-centric event log that was flattened for a specific object type.</param>
-    /// <returns>An Object-Centric Directly-Follows-Graph (DFG) with the filters applied.</returns>
-    static member DiscoverForSingleType(filter, objectType, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
-        // Discover the traces based on the referenced object type and discard the event ID's
+
+    /// Get the traces of a flattened event log, applying the given filters
+    static member GetTracesForSingleType(filter, log: OcelLog) : OcelEvent seq seq =
+        // Start by discovering the traces based on the referenced object type and discard the event ID's
         let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Seq.map (fun (_, e) -> e |> Seq.map snd)
 
-        // Additional step: Filter for log level
+        // Filter for log levels
         let tracesFilteredForLogLevel = traces |> Seq.choose (fun t ->
             let filtered = t |> Seq.filter (fun e ->
                 match OcelHelpers.GetLogLevel e with
-                | None -> filter.IncludedLogLevels |> List.contains LogLevel.Unknown // If the event doesn't have a log level, the Unknown value needs to be enabled
+                // If the event doesn't have a log level, the Unknown value needs to be enabled
+                | None -> filter.IncludedLogLevels |> List.contains LogLevel.Unknown
                 | Some l -> filter.IncludedLogLevels |> List.contains l)
             if filtered |> Seq.isEmpty then None else Some filtered)
 
@@ -84,8 +74,27 @@ type OcelDfg private () =
         let noOfEvents = OcelDfg.noOfEventsWithCase tracesFilteredForTimeframe
         let tracesFilteredForFrequency = tracesFilteredForTimeframe |> Seq.map (fun v -> v |> Seq.filter (fun e -> Map.find e.Activity noOfEvents >= filter.MinOccurrences))
 
+        tracesFilteredForFrequency
+            
+    /// <summary>
+    /// Create an Object-Centric Directly-Follows-Graph (DFG) for a flattened log, given the object type of the flattened log and a set of filter parameters.
+    /// Expects the log to not contain identical objects with different ID's. Use <see cref="OCEL.Types.OcelLog.MergeDuplicateObjects"/> to merge them beforehand.
+    /// Based on <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1101.pdf">A practitioner's guide to process mining: Limitations of the directly-follows graph</see> and
+    /// <see href="http://www.padsweb.rwth-aachen.de/wvdaalst/publications/p1056.pdf">Object-Centric Process Mining: Dealing with Divergence and Convergence in Event Data.</see>
+    /// </summary>
+    /// <param name="minEvents">Minimal number of events in a trace for it to be included.</param>
+    /// <param name="minOccurrences">Minimal number of global occurences for events to be kept in a trace.</param>
+    /// <param name="minSuccessions">Minimal number of direct successions for a relationship to be included in the DFG.</param>
+    /// <param name="objectType">The object type after whicht the log was flattened.</param>
+    /// <param name="log">An object-centric event log that was flattened for a specific object type.</param>
+    /// <returns>An Object-Centric Directly-Follows-Graph (DFG) with the filters applied.</returns>
+    static member DiscoverForSingleType(filter, objectType, log: OcelLog) : DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>> =
+
+        // Compute filtered traces traces
+        let traces = OcelDfg.GetTracesForSingleType(filter, log)
+
         // Step 4: Add a node for each activity remaining in the filtered event log
-        let groupedByActivityNamespace = tracesFilteredForFrequency |> Seq.collect id |> Seq.groupBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
+        let groupedByActivityNamespace = traces |> Seq.collect id |> Seq.groupBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
 
         // Create map of nodes with activity and optional namespace as key, for efficient lookup down below when creating edges
         let nodes =
@@ -106,7 +115,7 @@ type OcelDfg private () =
         // Alternate version in progress
         // Step 5: Connect the nodes that meet the minSuccessions treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= minSuccessions
         let directlyFollowing =
-            tracesFilteredForFrequency
+            traces
             |> Seq.collect Seq.pairwise
             |> Seq.groupBy (fun (a, b) -> (a.Activity, OcelHelpers.GetNamespace a), (b.Activity, OcelHelpers.GetNamespace b))
 
@@ -120,8 +129,8 @@ type OcelDfg private () =
             |> Seq.filter (fun (_, _, e) -> e.Weight >= filter.MinSuccessions) // Filter out edges that do not satisfy minimum threshold
 
         // Find and insert start and stop nodes and their respective edges
-        let starts = tracesFilteredForFrequency |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.head) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
-        let ends = tracesFilteredForFrequency |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.last) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
+        let starts = traces |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.head) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
+        let ends = traces |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.last) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
         let startNode = StartNode(objectType)
         let endNode = EndNode(objectType)
         let nodes = nodes |> Map.add ($"{Constants.objectTypeStartNode}{objectType}", None) startNode
