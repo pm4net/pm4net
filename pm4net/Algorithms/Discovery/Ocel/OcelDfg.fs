@@ -10,12 +10,12 @@ open pm4net.Utilities
 type OcelDfg private () =
     
     /// Count the number of occurences of an activity in multiple traces
-    static member private noOfEventsWithCase (traces: OcelEvent seq seq) =
+    static member private noOfEventsWithCase (traces: (string * OcelEvent) seq seq) =
         // For each trace, count the number of distinct activities and accumulate the result into a mapping for all traces
         (Map.empty<string, int>, traces)
         ||> Seq.fold (fun cnt trace ->
             // Count the number of distinct activities in this trace
-            let actCount = trace |> Seq.groupBy (fun e -> e.Activity) |> Seq.map (fun (act, events) -> act, events |> Seq.length)
+            let actCount = trace |> Seq.groupBy (fun (_, e) -> e.Activity) |> Seq.map (fun (act, events) -> act, events |> Seq.length)
             // Add missing keys to the map if encountering activities that were not seen before, and set the initial value to 0
             let cnt = (cnt, actCount) ||> Seq.fold (fun s v ->
                 match fst v |> s.ContainsKey with
@@ -67,55 +67,55 @@ type OcelDfg private () =
 
     /// Get the timestamp of the first and last event in a trace
     static member private getFirstAndLastEventTimestamp trace =
-        trace |> Seq.head |> fun e -> e.Timestamp, trace |> Seq.last |> fun e -> e.Timestamp
+        trace |> Seq.head |> fun (_, e) -> e.Timestamp, trace |> Seq.last |> fun (_, e) -> e.Timestamp
 
     /// Get the traces of a flattened event log, applying the given filters
-    static member GetTracesForSingleType(filter, log: OcelLog) : OcelEvent seq seq =
+    static member GetTracesForSingleType(filter, log: OcelLog) : seq<OcelObject * seq<string * OcelEvent>> =
         // Start by discovering the traces based on the referenced object type and discard the event ID's
-        let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog |> Seq.map (fun (_, e) -> e |> Seq.map snd)
+        let traces = log |> OcelHelpers.OrderedTracesOfFlattenedLog
 
         // Additional step: Filter for log levels
-        let tracesFilteredForLogLevel = traces |> Seq.choose (fun t ->
-            let filtered = t |> Seq.filter (fun e ->
+        let tracesFilteredForLogLevel = traces |> Seq.choose (fun (o, t) ->
+            let filtered = t |> Seq.filter (fun (_, e) ->
                 match OcelHelpers.GetLogLevel e with
                 // If the event doesn't have a log level, the Unknown value needs to be enabled
                 | None -> filter.IncludedLogLevels |> List.contains LogLevel.Unknown
                 | Some l -> filter.IncludedLogLevels |> List.contains l)
-            if filtered |> Seq.isEmpty then None else Some filtered)
+            if filtered |> Seq.isEmpty then None else Some (o, filtered))
 
         // Additional step: Filter for timeframe
         let tracesFilteredForTimeframe =
             match filter.Timeframe with
             | Some tf ->
-                tracesFilteredForLogLevel |> Seq.choose (fun t ->
+                tracesFilteredForLogLevel |> Seq.choose (fun (o, t) ->
                     let f, l = OcelDfg.getFirstAndLastEventTimestamp t
                     match tf.KeepCases with
-                    | ContainedInTimeframe -> if f > tf.From && l < tf.To then Some t else None
+                    | ContainedInTimeframe -> if f > tf.From && l < tf.To then Some(o, t) else None
                     // If it starts before, the last one must be in the timeframe or after it. If it starts within the timeframe, all is good.
-                    | IntersectingTimeframe -> if (f < tf.From && l >= tf.From) || (f >= tf.From && f <= tf.To) then Some t else None
-                    | StartedInTimeframe -> if f >= tf.From && f <= tf.To then Some t else None
-                    | CompletedInTimeframe -> if l >= tf.From && l <= tf.To then Some t else None
-                    | TrimToTimeframe -> t |> Seq.filter (fun e -> e.Timestamp >= tf.From && e.Timestamp <= tf.To) |> fun t -> if t |> Seq.isEmpty then None else Some t)
+                    | IntersectingTimeframe -> if (f < tf.From && l >= tf.From) || (f >= tf.From && f <= tf.To) then Some(o, t) else None
+                    | StartedInTimeframe -> if f >= tf.From && f <= tf.To then Some(o, t) else None
+                    | CompletedInTimeframe -> if l >= tf.From && l <= tf.To then Some(o, t) else None
+                    | TrimToTimeframe -> t |> Seq.filter (fun (_, e) -> e.Timestamp >= tf.From && e.Timestamp <= tf.To) |> fun t -> if t |> Seq.isEmpty then None else Some(o, t))
             | None -> tracesFilteredForLogLevel
 
         // Additional step: Filter for namespaces
         let tracesFilteredForNamespaces =
             match filter.IncludedNamespaces with
             | Some ns ->
-                tracesFilteredForTimeframe |> Seq.choose (fun t ->
-                    let filtered = t |> Seq.filter (fun e ->
+                tracesFilteredForTimeframe |> Seq.choose (fun (o, t) ->
+                    let filtered = t |> Seq.filter (fun (_, e) ->
                         match OcelHelpers.GetNamespace e with
                         | Some eNs -> ns |> OcelDfg.isNamespaceInTree eNs
                         | None -> true) // Always allow events without namespace through
-                    if filtered |> Seq.isEmpty then None else Some filtered)
+                    if filtered |> Seq.isEmpty then None else Some(o, filtered))
             | None -> tracesFilteredForTimeframe
 
         // Step 2: Remove all cases from log having a trace with a frequency lower than minEvents
-        let tracesFilteredForLength = tracesFilteredForNamespaces |> Seq.filter (fun v -> v |> Seq.length >= filter.MinEvents)
+        let tracesFilteredForLength = tracesFilteredForNamespaces |> Seq.filter (fun (_, v) -> v |> Seq.length >= filter.MinEvents)
 
         // Step 3: Remove all events with a frequency lower than minOccurrences
-        let noOfEvents = OcelDfg.noOfEventsWithCase tracesFilteredForLength
-        let tracesFilteredForFrequency = tracesFilteredForLength |> Seq.map (fun v -> v |> Seq.filter (fun e -> Map.find e.Activity noOfEvents >= filter.MinOccurrences))
+        let noOfEvents = OcelDfg.noOfEventsWithCase (tracesFilteredForLength |> Seq.map snd)
+        let tracesFilteredForFrequency = tracesFilteredForLength |> Seq.map (fun (o, v) -> o, v |> Seq.filter (fun (_, e) -> Map.find e.Activity noOfEvents >= filter.MinOccurrences))
 
         tracesFilteredForFrequency
             
@@ -137,7 +137,7 @@ type OcelDfg private () =
         let traces = OcelDfg.GetTracesForSingleType(filter, log)
 
         // Step 4: Add a node for each activity remaining in the filtered event log
-        let groupedByActivityNamespace = traces |> Seq.collect id |> Seq.groupBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
+        let groupedByActivityNamespace = traces |> Seq.collect snd |> Seq.groupBy (fun (_, e) -> e.Activity, OcelHelpers.GetNamespace e)
 
         // Create map of nodes with activity and optional namespace as key, for efficient lookup down below when creating edges
         let nodes =
@@ -148,9 +148,9 @@ type OcelDfg private () =
                     Info = Some {
                         Frequency = events |> Seq.length
                         Namespace = ns
-                        Level = events |> Seq.toList |> Helpers.mostCommonValue (fun e -> OcelHelpers.GetLogLevel e)
-                        Attributes = events |> Seq.head |> fun e -> e.VMap
-                        Objects = events |> Seq.head |> fun e -> e.OMap |> List.map (fun o -> log.Objects[o])
+                        Level = events |> Seq.toList |> Helpers.mostCommonValue (fun (_, e) -> OcelHelpers.GetLogLevel e)
+                        Attributes = events |> Seq.head |> fun (_, e) -> e.VMap
+                        Objects = events |> Seq.head |> fun (_, e) -> e.OMap |> List.map (fun o -> log.Objects[o])
                     }
                 }))
             |> Map.ofSeq
@@ -159,21 +159,22 @@ type OcelDfg private () =
         // Step 5: Connect the nodes that meet the minSuccessions treshold, i.e. activities a and b are connected if and only if #L''(a,b) >= minSuccessions
         let directlyFollowing =
             traces
+            |> Seq.map snd
             |> Seq.collect Seq.pairwise
-            |> Seq.groupBy (fun (a, b) -> (a.Activity, OcelHelpers.GetNamespace a), (b.Activity, OcelHelpers.GetNamespace b))
+            |> Seq.groupBy (fun ((_, a), (_, b)) -> (a.Activity, OcelHelpers.GetNamespace a), (b.Activity, OcelHelpers.GetNamespace b))
 
         let edges =
             (([]: (Node<NodeInfo> * Node<NodeInfo> * Edge<EdgeInfo>) list), directlyFollowing)
             ||> Seq.fold (fun edges (((aAct, aNs), (bAct, bNs)), trace) ->
                 let aNode = nodes[aAct, aNs]
                 let bNode = nodes[bAct, bNs]
-                let durations = trace |> Seq.map OcelDfg.durationBetweenEvents
+                let durations = trace |> Seq.map (fun ((_, a), (_, b)) -> OcelDfg.durationBetweenEvents(a, b))
                 (aNode, bNode, { Weight = trace |> Seq.length; Type = Some objectType; Info = Some { Durations = durations |> Seq.toList } }) :: edges)
             |> Seq.filter (fun (_, _, e) -> e.Weight >= filter.MinSuccessions) // Filter out edges that do not satisfy minimum threshold
 
         // Find and insert start and stop nodes and their respective edges
-        let starts = traces |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.head) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
-        let ends = traces |> Seq.filter (fun l -> l |> Seq.isEmpty |> not) |> Seq.map (fun t -> t |> Seq.last) |> Seq.countBy (fun e -> e.Activity, OcelHelpers.GetNamespace e)
+        let starts = traces |> Seq.filter (fun (_, l) -> l |> Seq.isEmpty |> not) |> Seq.map (fun (_, t) -> t |> Seq.head) |> Seq.countBy (fun (_, e) -> e.Activity, OcelHelpers.GetNamespace e)
+        let ends = traces |> Seq.filter (fun (_, l) -> l |> Seq.isEmpty |> not) |> Seq.map (fun (_, t) -> t |> Seq.last) |> Seq.countBy (fun (_, e) -> e.Activity, OcelHelpers.GetNamespace e)
         let startNode = StartNode(objectType)
         let endNode = EndNode(objectType)
         let nodes = nodes |> Map.add ($"{Constants.objectTypeStartNode}{objectType}", None) startNode
