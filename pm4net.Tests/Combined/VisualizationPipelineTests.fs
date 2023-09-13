@@ -80,9 +80,9 @@ module VisualizationPipelineTests =
 
         [<Fact>]
         let ``Can discover DFG from 'Github pm4py' log and generate MSAGL graph`` () =
-            let json = File.ReadAllText("blazor-logs.jsonocel")
+            let json = File.ReadAllText("github_pm4py.jsonocel")
             let log = OCEL.OcelJson.deserialize true json
             let log = log.MergeDuplicateObjects()
-            let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["CorrelationId"; "StartDate"; "Now"; "Incremented"], log)
+            let dfg = Discovery.Ocel.OcelDfg.Discover(filter, log.ObjectTypes |> Set.toList, log)
             let svg = Msagl.OcDfg2Msagl dfg false
             svg |> String.IsNullOrWhiteSpace |> Assert.False

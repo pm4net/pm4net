@@ -25,13 +25,40 @@ type Msagl private () =
     /// Create a node from an event node
     static member private createEventNode (eventNode: EventNode<NodeInfo>) =
         let node = Node(eventNode.Name)
+        node.LabelText <- eventNode.Name
+        node.Label.Width <- 100
+        node.Label.Height <- 50
+        node.Attr.Shape <- Shape.Box
+        node.Attr.FillColor <-
+            match eventNode.Info with
+            | Some info ->
+                match info.Level with
+                | Some level ->
+                    match level with
+                    | Debug | Verbose -> Color.White
+                    | Information -> Color.LightGray
+                    | Warning -> Color.Orange
+                    | Error -> Color.Red
+                    | Fatal -> Color.DarkRed
+                    | _ -> Color.White
+                | _ -> Color.White
+            | _ -> Color.White
+        // TODO: font color
         node
 
     /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a graph with the help of MSAGL, rendered as a SVG
     static member OcDfg2Msagl (ocdfg: DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>>) (groupByNamespace: bool) =
 
+        /// Convert a System.Drawing color to a MSAGL color
         let msColorToMsaglColor (color: Drawing.Color) =
             Color(color.A, color.R, color.G, color.B)
+
+        /// https://stackoverflow.com/a/3722671/2102106
+        let (|Prefix|_|) (p:string) (s:string) =
+            if s.StartsWith(p) then
+                Some(s.Substring(p.Length))
+            else
+                None
 
         // Graph that contains all nodes, edges, and subgraphs
         let graph = Graph()
@@ -52,7 +79,7 @@ type Msagl private () =
                     node.LabelText <- objType
                     node.Label.Width <- 60 // TODO
                     node.Label.Height <- 40 // TODO
-                    //node.Attr.Shape <- Shape.Box
+                    node.Attr.Shape <- Shape.Ellipse
                     node.Attr.FillColor <- typeColors[objType] |> msColorToMsaglColor
                     Some node
                 | EndNode objType ->
@@ -60,9 +87,9 @@ type Msagl private () =
                     node.LabelText <- objType
                     node.Label.Width <- 60 // TODO
                     node.Label.Height <- 40 // TODO
-                    //node.Attr.Shape <- Shape.Plaintext
-                    node.Attr.Color <- typeColors[objType] |> msColorToMsaglColor
-                    // node.Attr.FillColor <- typeColors[objType] |> msColorToMsaglColor
+                    node.Attr.Shape <- Shape.Plaintext
+                    //node.Attr.Color <- typeColors[objType] |> msColorToMsaglColor
+                    node.Attr.FillColor <- typeColors[objType] |> msColorToMsaglColor
                     Some node
                 | _ -> None)
         startEndNodes |> List.iter (fun n -> graph.AddNode(n))
@@ -100,7 +127,12 @@ type Msagl private () =
         graph.CreateGeometryGraph() |> ignore
 
         // Define geometrz for nodes
-        graph.Nodes |> Seq.iter (fun n -> n.GeometryNode.BoundaryCurve <- CurveFactory.CreateRectangleWithRoundedCorners(60, 40, 3, 2, Point(0, 0)))
+        graph.Nodes |> Seq.iter (fun n ->
+            match n.Id with
+            | Prefix (nameof(StartNode)) rest -> n.GeometryNode.BoundaryCurve <- CurveFactory.CreateEllipse(30, 20, Point(0, 0))
+            | Prefix (nameof(EndNode)) rest -> n.GeometryNode.BoundaryCurve <- CurveFactory.CreateRectangle(120, 60, Point(0, 0))
+            | _ -> n.GeometryNode.BoundaryCurve <- CurveFactory.CreateRectangleWithRoundedCorners(60, 40, 3, 2, Point(0, 0))
+        )
 
         // Calculate layout and return as SVG
         LayoutHelpers.CalculateLayout(graph.GeometryGraph, SugiyamaLayoutSettings(), null)
