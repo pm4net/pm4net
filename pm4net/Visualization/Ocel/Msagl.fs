@@ -10,6 +10,7 @@ open Microsoft.Msagl.Drawing
 open Microsoft.Msagl.Layout.Layered
 open Microsoft.Msagl.Miscellaneous
 
+[<Obsolete("Very experimental, use at your own risk.")>]
 type Msagl private () =
 
     /// Write a graph to a SVG string
@@ -22,12 +23,27 @@ type Msagl private () =
         let sr = new StreamReader(ms)
         sr.ReadToEnd()
 
+    /// Wrap a long text into multiple lines with a given limit of how long one line may be
+    static member private wrapText limit (text: string) =
+        let words = text.Split(' ')
+        ([], words) ||> Array.fold (fun lines word ->
+            match lines with
+            | [] -> [word]
+            | _ ->
+                let updatedLine = $"{lines.Head} {word}"
+                if updatedLine.Length > limit then
+                    word :: lines
+                else
+                    lines |> List.updateAt 0 updatedLine
+        ) |> List.rev
+
     /// Create a node from an event node
     static member private createEventNode (eventNode: EventNode<NodeInfo>) =
         let node = Node(eventNode.Name)
-        node.LabelText <- eventNode.Name
-        node.Label.Width <- 100
-        node.Label.Height <- 50
+        let wrapped = Msagl.wrapText 25 eventNode.Name
+        node.LabelText <- wrapped |> List.reduce (fun s v -> $"{s}{Environment.NewLine}{v}")
+        node.Label.Width <- (wrapped |> List.maxBy (fun s -> s.Length) |> fun s -> s.Length * 10) |> float
+        node.Label.Height <- (wrapped.Length * 10) |> float
         node.Attr.Shape <- Shape.Box
         node.Attr.FillColor <-
             match eventNode.Info with
@@ -131,7 +147,7 @@ type Msagl private () =
             match n.Id with
             | Prefix (nameof(StartNode)) rest -> n.GeometryNode.BoundaryCurve <- CurveFactory.CreateEllipse(30, 20, Point(0, 0))
             | Prefix (nameof(EndNode)) rest -> n.GeometryNode.BoundaryCurve <- CurveFactory.CreateRectangle(120, 60, Point(0, 0))
-            | _ -> n.GeometryNode.BoundaryCurve <- CurveFactory.CreateRectangleWithRoundedCorners(60, 40, 3, 2, Point(0, 0))
+            | _ -> n.GeometryNode.BoundaryCurve <- CurveFactory.CreateRectangleWithRoundedCorners(100, 50, 3, 2, Point(0, 0))
         )
 
         // Calculate layout and return as SVG

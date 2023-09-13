@@ -54,6 +54,12 @@ module internal Helpers =
         | StartNode n -> $"{nameof(StartNode)} {n}"
         | EndNode n -> $"{nameof(EndNode)} {n}"
 
+    /// Get the display text for a ndoe
+    let nodeText = function
+        | EventNode n -> n.Name
+        | StartNode n
+        | EndNode n -> n
+
     // Get list of unique fully-qualified namespaces
     let namespaceList nodes =
         nodes
