@@ -81,29 +81,14 @@ type Graphviz private () =
     /// Convert an Object-Centric Directly-Follows-Graph (OC-DFG) into a DOT graph
     static member OcDfg2Dot (ocdfg: DirectedGraph<Node<NodeInfo>, Edge<EdgeInfo>>) (groupByNamespace: bool) =
 
-        /// Get a unique name for a node
-        let nodeName = function
-            | EventNode n -> n.Name
-            | StartNode n -> $"{nameof(StartNode)} {n}"
-            | EndNode n -> $"{nameof(EndNode)} {n}"
-
         // Graph that contains all nodes, edges, and subgraphs
         let graph = DotGraph("DFG", true)
 
         // Assign random colors to each object type to use them for edge colors
-        let typeColors =
-            ocdfg.Nodes
-            |> List.choose (fun n -> match n with | StartNode n -> Some n | _ -> None)
-            |> List.map (fun obj -> obj, Helpers.randomColor())
-            |> Map.ofList
+        let typeColors = Helpers.typeColors ocdfg.Nodes
 
         /// Find the maximum frequency of edges for all object types
-        let typeMaxFrequencies =
-            ocdfg.Edges
-            |> List.map (fun (_, _, e) -> e)
-            |> List.groupBy (fun e -> e.Type)
-            |> List.map (fun (k, v) -> k, v |> List.maxBy (fun e -> e.Weight) |> fun e -> e.Weight)
-            |> Map.ofList
+        let typeMaxFrequencies = Helpers.typeMaxFrequencies ocdfg.Edges
 
         // Create DOT start and end nodes for all types
         let startEndNodes =
@@ -111,14 +96,14 @@ type Graphviz private () =
             |> List.choose (fun n ->
                 match n with
                 | StartNode objType ->
-                    let node = DotNode(StartNode objType |> nodeName)
+                    let node = DotNode(StartNode objType |> Helpers.nodeName)
                     node.Label <- objType
                     node.Shape <- DotNodeShapeAttribute DotNodeShape.Ellipse
                     node.Style <- DotNodeStyleAttribute DotNodeStyle.Filled
                     node.FillColor <- DotFillColorAttribute typeColors[objType]
                     Some node
                 | EndNode objType ->
-                    let node = DotNode(EndNode objType |> nodeName)
+                    let node = DotNode(EndNode objType |> Helpers.nodeName)
                     node.Label <- objType
                     node.Shape <- DotNodeShapeAttribute DotNodeShape.Underline
                     node.Color <- DotColorAttribute typeColors[objType]
@@ -131,7 +116,7 @@ type Graphviz private () =
         let edges =
             ocdfg.Edges
             |> List.map (fun (a, b, e) ->
-                let edge = DotEdge(nodeName a, nodeName b)
+                let edge = DotEdge(Helpers.nodeName a, Helpers.nodeName b)
                 edge.Label <- e.Weight.ToString()
                 edge.FontColor <- DotFontColorAttribute (match e.Type with | Some objType -> typeColors[objType] | _ -> Drawing.Color.Black)
                 edge.Color <- DotColorAttribute (match e.Type with | Some objType -> typeColors[objType] | _ -> Drawing.Color.Black)
@@ -168,17 +153,7 @@ type Graphviz private () =
             graph
 
         // Get list of unique fully-qualified namespaces
-        let namespaces =
-            ocdfg.Nodes
-            |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
-            |> List.map (fun n ->
-                match n.Info with
-                | Some info ->
-                    match info.Namespace with
-                    | Some ns -> ns
-                    | _ -> String.Empty
-                | _ -> String.Empty)
-            |> List.distinct
+        let namespaces = ocdfg.Nodes |> Helpers.namespaceList
 
         // Determine whether there is any namespace information, generate the DOT graph, and finally compile it
         let eventNodes = ocdfg.Nodes |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
