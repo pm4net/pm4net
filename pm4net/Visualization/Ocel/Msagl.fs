@@ -88,7 +88,7 @@ type Msagl private () =
         // Create start and end nodes for all types
         let startEndNodes =
             ocdfg.Nodes
-            |> List.choose (fun n ->
+            |> Seq.choose (fun n ->
                 match n with
                 | StartNode objType ->
                     let node = Helpers.nodeName n |> Node
@@ -108,11 +108,11 @@ type Msagl private () =
                     node.Attr.FillColor <- typeColors[objType] |> msColorToMsaglColor
                     Some node
                 | _ -> None)
-        startEndNodes |> List.iter (fun n -> graph.AddNode(n))
+        startEndNodes |> Seq.iter (fun n -> graph.AddNode(n))
 
         // Create edges
         ocdfg.Edges
-        |> List.iter (fun (a, b, e) ->
+        |> Seq.iter (fun (a, b, e) ->
             let edge = graph.AddEdge(Helpers.nodeName a, e.Weight.ToString(), Helpers.nodeName b)
             edge.Attr.Color <- (match e.Type with | Some objType -> typeColors[objType] |> msColorToMsaglColor | _ -> Color.Black)
             edge.Attr.LineWidth <- Helpers.scaleToRange 1f 5f 1f (typeMaxFrequencies[e.Type] |> float32) (e.Weight |> float32) |> float)
@@ -120,18 +120,18 @@ type Msagl private () =
         // Add event nodes without any kind of grouping by namespace
         let addNodesWithoutNamespaces (graph: Graph) nodes =
             nodes
-            |> List.map (fun n -> Msagl.createEventNode n)
-            |> List.iter (fun n -> graph.AddNode n)
+            |> Seq.map (fun n -> Msagl.createEventNode n)
+            |> Seq.iter (fun n -> graph.AddNode n)
 
         // Get list of unique fully-qualified namespaces
         let namespaces = ocdfg.Nodes |> Helpers.namespaceList
 
         // Determine whether there is any namespace information, generate the DOT graph, and finally compile it
-        let eventNodes = ocdfg.Nodes |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
+        let eventNodes = ocdfg.Nodes |> Seq.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
         let separators = [|'.'|]
 
         // Add event nodes
-        match namespaces, groupByNamespace with
+        match namespaces |> Seq.toList, groupByNamespace with
         | [], _ | [""], _ | _, false -> eventNodes |> addNodesWithoutNamespaces graph
         | _ ->
             ()

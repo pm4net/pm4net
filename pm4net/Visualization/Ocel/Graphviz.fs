@@ -31,7 +31,7 @@ type Graphviz private () =
             match path with
             | [] -> match tree with | Node((_, value), _) -> Some value
             | head :: tail ->
-                match children |> List.tryFind (fun (Node((value, _), _)) -> value = head) with
+                match children |> Seq.tryFind (fun (Node((value, _), _)) -> value = head) with
                 | Some next -> Graphviz.findNodeWithPath next tail
                 | None -> None
 
@@ -40,7 +40,7 @@ type Graphviz private () =
         match tree with
         | Node((_, subGraph), children) ->
             graph.Elements.Add subGraph
-            children |> List.iter (fun c -> Graphviz.addSubgraphsToGraph c subGraph)
+            children |> Seq.iter (fun c -> Graphviz.addSubgraphsToGraph c subGraph)
 
     /// Create a DOT node from en Event node
     static member private createEventNode (eventNode: EventNode<NodeInfo>) =
@@ -93,7 +93,7 @@ type Graphviz private () =
         // Create DOT start and end nodes for all types
         let startEndNodes =
             ocdfg.Nodes
-            |> List.choose (fun n ->
+            |> Seq.choose (fun n ->
                 match n with
                 | StartNode objType ->
                     let node = DotNode(StartNode objType |> Helpers.nodeName)
@@ -110,12 +110,12 @@ type Graphviz private () =
                     node.FontColor <- DotFontColorAttribute typeColors[objType]
                     Some node
                 | _ -> None)
-        startEndNodes |> List.iter (fun n -> graph.Elements.Add n)
+        startEndNodes |> Seq.iter (fun n -> graph.Elements.Add n)
 
         // Create DOT edges for all edges in the graph
         let edges =
             ocdfg.Edges
-            |> List.map (fun (a, b, e) ->
+            |> Seq.map (fun (a, b, e) ->
                 let edge = DotEdge(Helpers.nodeName a, Helpers.nodeName b)
                 edge.Label <- e.Weight.ToString()
                 edge.FontColor <- DotFontColorAttribute (match e.Type with | Some objType -> typeColors[objType] | _ -> Drawing.Color.Black)
@@ -124,19 +124,19 @@ type Graphviz private () =
                 edge.SetCustomAttribute("weight", $"{e.Weight}") |> ignore
                 edge
             )
-        edges |> List.iter (fun e -> graph.Elements.Add e)
+        edges |> Seq.iter (fun e -> graph.Elements.Add e)
 
         /// Add DOT nodes without any kind of grouping by namespace
         let addNodesWithoutNamespaces (graph: DotGraph) nodes =
             nodes
-            |> List.map (fun n -> Graphviz.createEventNode n)
-            |> List.iter (fun n -> graph.Elements.Add n)
+            |> Seq.map (fun n -> Graphviz.createEventNode n)
+            |> Seq.iter (fun n -> graph.Elements.Add n)
             graph
 
         /// Add DOT nodes by grouping nodes into sub-graphs based on their namespace
-        let addNodesWithNamespaces separators (graph: DotGraph) (nodes: EventNode<NodeInfo> list) (tree: ListTree<string * DotSubGraph>) : DotGraph =
+        let addNodesWithNamespaces separators (graph: DotGraph) (nodes: EventNode<NodeInfo> seq) (tree: ListTree<string * DotSubGraph>) : DotGraph =
             nodes
-            |> List.iter (fun n ->
+            |> Seq.iter (fun n ->
                 match n.Info with
                 | Some info ->
                     match info.Namespace with
@@ -156,10 +156,10 @@ type Graphviz private () =
         let namespaces = ocdfg.Nodes |> Helpers.namespaceList
 
         // Determine whether there is any namespace information, generate the DOT graph, and finally compile it
-        let eventNodes = ocdfg.Nodes |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
+        let eventNodes = ocdfg.Nodes |> Seq.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
         let separators = [|'.'|]
 
-        match namespaces, groupByNamespace with
+        match namespaces |> Seq.toList, groupByNamespace with
         | [], _ | [""], _ | _, false ->
             eventNodes |> addNodesWithoutNamespaces graph
         | _ ->
