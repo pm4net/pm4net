@@ -45,7 +45,7 @@ type OcelDfg private () =
                     match tree with
                     | Node(_, children) ->
                         children
-                        |> Seq.tryFind (fun c ->
+                        |> List.tryFind (fun c ->
                             match c with
                             | Node(n, _) -> n = cmp)
 
@@ -54,7 +54,7 @@ type OcelDfg private () =
                 | Some branch -> isInTree tail branch
                 | None ->
                     // Check if the tree has exactly one child with a wildcard, in which case all remaining components are allowed
-                    match match tree with | Node(_, c) -> c |> Seq.tryExactlyOne with
+                    match match tree with | Node(_, c) -> c |> List.tryExactlyOne with
                     | Some(Node(n, _)) -> n = "*"
                     | None -> false
 
@@ -79,8 +79,8 @@ type OcelDfg private () =
             let filtered = t |> Seq.filter (fun (_, e) ->
                 match OcelHelpers.GetLogLevel e with
                 // If the event doesn't have a log level, the Unknown value needs to be enabled
-                | None -> filter.IncludedLogLevels |> Seq.contains LogLevel.Unknown
-                | Some l -> filter.IncludedLogLevels |> Seq.contains l)
+                | None -> filter.IncludedLogLevels |> List.contains LogLevel.Unknown
+                | Some l -> filter.IncludedLogLevels |> List.contains l)
             if filtered |> Seq.isEmpty then None else Some (o, filtered))
 
         // Additional step: Filter for timeframe
@@ -208,8 +208,8 @@ type OcelDfg private () =
         |> Seq.fold (fun state (_, value) ->
             { state with
                 Nodes =
-                    Seq.append state.Nodes value.Nodes
-                    |> Seq.groupBy (fun n ->
+                    List.append state.Nodes value.Nodes
+                    |> List.groupBy (fun n ->
                         match n with
                         | EventNode n ->
                             let baseStr = nameof(EventNode) + n.Name
@@ -218,7 +218,7 @@ type OcelDfg private () =
                             | _ -> baseStr
                         | StartNode n -> nameof(StartNode) + n
                         | EndNode n -> nameof(EndNode) + n)
-                    |> Seq.map (fun (_, nodes) -> nodes |> Seq.maxBy (fun n ->
+                    |> List.map (fun (_, nodes) -> nodes |> List.maxBy (fun n ->
                         match n with
                         | EventNode n ->
                             match n.Info with
@@ -226,7 +226,7 @@ type OcelDfg private () =
                             | _ -> 0
                         | StartNode _ | EndNode _ -> 0 // There should only be one start and end node anyway
                     ))
-                Edges = Seq.append state.Edges value.Edges
+                Edges = List.append state.Edges value.Edges
             }
         ) { Nodes = []; Edges = [] }
 

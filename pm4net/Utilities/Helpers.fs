@@ -29,17 +29,17 @@ module internal Helpers =
     // Assign random colors to each object type to use them for edge colors
     let typeColors nodes =
         nodes
-        |> Seq.choose (fun n -> match n with | StartNode n -> Some n | _ -> None)
-        |> Seq.map (fun obj -> obj, randomColor())
-        |> Map.ofSeq
+        |> List.choose (fun n -> match n with | StartNode n -> Some n | _ -> None)
+        |> List.map (fun obj -> obj, randomColor())
+        |> Map.ofList
 
     /// Find the maximum frequency of edges for all object types
     let typeMaxFrequencies edges =
         edges
-        |> Seq.map (fun (_, _, e) -> e)
-        |> Seq.groupBy (fun e -> e.Type)
-        |> Seq.map (fun (k, v) -> k, v |> Seq.maxBy (fun e -> e.Weight) |> fun e -> e.Weight)
-        |> Map.ofSeq
+        |> List.map (fun (_, _, e) -> e)
+        |> List.groupBy (fun e -> e.Type)
+        |> List.map (fun (k, v) -> k, v |> List.maxBy (fun e -> e.Weight) |> fun e -> e.Weight)
+        |> Map.ofList
 
     /// Scale a value down to a given range (from https://stackoverflow.com/a/31687097/2102106)
     let scaleToRange (min: float32) max observedMin observedMax value =
@@ -63,12 +63,12 @@ module internal Helpers =
     // Get list of unique fully-qualified namespaces
     let namespaceList nodes =
         nodes
-        |> Seq.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
-        |> Seq.map (fun n ->
+        |> List.choose (fun n -> match n with | EventNode n -> Some n | _ -> None)
+        |> List.map (fun n ->
             match n.Info with
             | Some info ->
                 match info.Namespace with
                 | Some ns -> ns
                 | _ -> String.Empty
             | _ -> String.Empty)
-        |> Seq.distinct
+        |> List.distinct

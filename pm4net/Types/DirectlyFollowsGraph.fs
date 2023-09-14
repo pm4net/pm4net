@@ -12,5 +12,5 @@ type NodeInfo = {
 }
 
 type EdgeInfo = {
-    Durations: TimeSpan seq
+    Durations: TimeSpan list
 }

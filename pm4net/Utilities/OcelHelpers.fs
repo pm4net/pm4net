@@ -99,7 +99,7 @@ type OcelHelpers private () =
             /// Get the node and its index in a list of nodes that has a given value, if any exist.
             let hasExistingNodeIndex nodes value =
                 match nodes |> List.tryFindIndex (fun (Node(v, _)) -> v = value) with
-                | Some i -> Some (nodes |> Seq.item i, i)
+                | Some i -> Some (nodes[i], i)
                 | None -> None
 
             // Only has the Node type, but that has to be deconstructed first
