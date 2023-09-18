@@ -27,6 +27,7 @@
     <Compile Include="Types\Input.fs" />
     <Compile Include="Utilities\Helpers.fs" />
     <Compile Include="Utilities\OcelHelpers.fs" />
+    <Compile Include="Visualization\Ocel\Msagl.fs" />
     <Compile Include="Visualization\Ocel\Graphviz.fs" />
     <Compile Include="Algorithms\Discovery\Ocel\OcelDfg.fs" />
 	<Content Include="..\README.md" Pack="true" PackagePath="\">
@@ -36,6 +37,8 @@
 
   <ItemGroup>
 	<PackageReference Update="FSharp.Core" Version="6.0.0" />
+	<PackageReference Include="AutomaticGraphLayout" Version="1.1.12" />
+	<PackageReference Include="AutomaticGraphLayout.Drawing" Version="1.1.12" />
 	<PackageReference Include="DotNetGraph" Version="2.7.0" />
     <PackageReference Include="Newtonsoft.Json" Version="6.0.8" />
     <PackageReference Include="OCEL" Version="1.4.0" />
