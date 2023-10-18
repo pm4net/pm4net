@@ -31,11 +31,13 @@ module VisualizationPipelineTests =
             ]) |> Some
     }
 
+    let dataPath = @"..\..\..\..\..\..\data\OCEL\"
+
     module Dot =
 
         [<Fact>]
         let ``Can discover DFG from sample log and generate DOT graph`` () =
-            let json = File.ReadAllText("minimal.jsonocel")
+            let json = File.ReadAllText(Path.Combine(dataPath, "minimal.jsonocel"))
             let log = OCEL.OcelJson.deserialize true json
             let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["customer"; "item"; "order"; "package"; "product"], log)
             let dot = Graphviz.OcDfg2Dot dfg false
@@ -43,7 +45,7 @@ module VisualizationPipelineTests =
 
         [<Fact>]
         let ``Can discover DFG from 'Github pm4py' log and generate DOT graph`` () =
-            let json = File.ReadAllText("github_pm4py.jsonocel")
+            let json = File.ReadAllText(Path.Combine(dataPath, "github_pm4py.jsonocel"))
             let log = OCEL.OcelJson.deserialize true json
             let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["case:concept:name"], log)
             let dot = Graphviz.OcDfg2Dot dfg false
@@ -51,7 +53,7 @@ module VisualizationPipelineTests =
 
         [<Fact>]
         let ``Can discover DFG from 'blazor-logs' log and generate DOT graph`` () =
-            let json = File.ReadAllText("blazor-logs.jsonocel")
+            let json = File.ReadAllText(Path.Combine(dataPath, "blazor-logs.jsonocel"))
             let log = OCEL.OcelJson.deserialize true json
             let log = log.MergeDuplicateObjects()
             let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["CorrelationId"; "StartDate"; "Now"; "Incremented"], log)
@@ -60,7 +62,7 @@ module VisualizationPipelineTests =
 
         [<Fact>]
         let ``Can discover DFG from 'blazor-logs' log with namespace filter and generate DOT graph`` () =
-            let json = File.ReadAllText("blazor-logs.jsonocel")
+            let json = File.ReadAllText(Path.Combine(dataPath, "blazor-logs.jsonocel"))
             let log = OCEL.OcelJson.deserialize true json
             let log = log.MergeDuplicateObjects()
             let dfg = Discovery.Ocel.OcelDfg.Discover(namespaceFilter, ["CorrelationId"; "StartDate"; "Now"; "Incremented"], log)
@@ -69,7 +71,7 @@ module VisualizationPipelineTests =
 
         [<Fact>]
         let ``Can discover DFG from 'blazor-logs' log and generate DOT graph with namespace clustering`` () =
-            let json = File.ReadAllText("blazor-logs.jsonocel")
+            let json = File.ReadAllText(Path.Combine(dataPath, "blazor-logs.jsonocel"))
             let log = OCEL.OcelJson.deserialize true json
             let log = log.MergeDuplicateObjects()
             let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["CorrelationId"; "StartDate"; "Now"; "Incremented"], log)
@@ -80,7 +82,7 @@ module VisualizationPipelineTests =
 
         [<Fact>]
         let ``Can discover DFG from 'Github pm4py' log and generate MSAGL graph`` () =
-            let json = File.ReadAllText("github_pm4py.jsonocel")
+            let json = File.ReadAllText(Path.Combine(dataPath, "github_pm4py.jsonocel"))
             let log = OCEL.OcelJson.deserialize true json
             let log = log.MergeDuplicateObjects()
             let dfg = Discovery.Ocel.OcelDfg.Discover(filter, log.ObjectTypes |> Set.toList, log)

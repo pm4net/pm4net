@@ -19,6 +19,8 @@ module OcelDfgTests =
         IncludedNamespaces = None
     }
 
+    let dataPath = @"..\..\..\..\..\..\data\pm4net\"
+
     let timeframeFilter = {
         filter with
             Timeframe = Some {
@@ -41,28 +43,28 @@ module OcelDfgTests =
 
     [<Fact>]
     let ``Can discover DFG from sample log`` () =
-        let json = File.ReadAllText("minimal.jsonocel")
+        let json = File.ReadAllText(Path.Combine(dataPath, "minimal.jsonocel"))
         let log = OCEL.OcelJson.deserialize true json
         let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["customer"; "item"; "order"; "package"; "product"], log)
         true
 
     [<Fact>]
     let ``Can discover DFG from 'Github pm4py' log`` () =
-        let json = File.ReadAllText("github_pm4py.jsonocel")
+        let json = File.ReadAllText(Path.Combine(dataPath, "github_pm4py.jsonocel"))
         let log = OCEL.OcelJson.deserialize true json
         let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["case:concept:name"; "org:resource"; "case:repo"], log)
         true
 
     [<Fact>]
     let ``Can discover DFG from 'Github pm4py' log with timeframe filter`` () =
-        let json = File.ReadAllText("github_pm4py.jsonocel")
+        let json = File.ReadAllText(Path.Combine(dataPath, "github_pm4py.jsonocel"))
         let log = OCEL.OcelJson.deserialize true json
         let dfg = Discovery.Ocel.OcelDfg.Discover(timeframeFilter, log.ObjectTypes |> Set.toList, log)
         true
 
     [<Fact>]
     let ``Can discover DFG from 'blazor-logs' log`` () =
-        let json = File.ReadAllText("blazor-logs.jsonocel")
+        let json = File.ReadAllText(Path.Combine(dataPath, "blazor-logs.jsonocel"))
         let log = OCEL.OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
         let dfg = Discovery.Ocel.OcelDfg.Discover(filter, ["CorrelationId"; "Incremented"; "Now"; "StartDate"], log)
@@ -70,7 +72,7 @@ module OcelDfgTests =
 
     [<Fact>]
     let ``Can discover DFG from 'blazor-logs' log with namespace filter`` () =
-        let json = File.ReadAllText("blazor-logs.jsonocel")
+        let json = File.ReadAllText(Path.Combine(dataPath, "blazor-logs.jsonocel"))
         let log = OCEL.OcelJson.deserialize true json
         let log = log.MergeDuplicateObjects()
         let dfg = Discovery.Ocel.OcelDfg.Discover(namespaceFilter, ["CorrelationId"; "Incremented"; "Now"; "StartDate"], log)
@@ -78,14 +80,14 @@ module OcelDfgTests =
 
     [<Fact>]
     let ``Can discover DFG from 'recruiting' log`` () =
-        let json = File.ReadAllText("recruiting.jsonocel")
+        let json = File.ReadAllText(Path.Combine(dataPath, "recruiting.jsonocel"))
         let log = OCEL.OcelJson.deserialize true json
         let dfg = Discovery.Ocel.OcelDfg.Discover(filter, log.ObjectTypes |> Set.toList, log)
         true
 
     [<Fact>]
     let ``Can discover DFG from 'windows_events' log`` () =
-        let json = File.ReadAllText("windows_events.jsonocel")
+        let json = File.ReadAllText(Path.Combine(dataPath, "windows_events.jsonocel"))
         let log = OCEL.OcelJson.deserialize true json
         let dfg = Discovery.Ocel.OcelDfg.Discover(filter, log.ObjectTypes |> Set.toList, log)
         true

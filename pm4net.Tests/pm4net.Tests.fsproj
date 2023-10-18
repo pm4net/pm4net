@@ -31,37 +31,7 @@
     <PackageReference Update="FSharp.Core" Version="6.0.0" />
   </ItemGroup>
 
-  <ItemGroup>
-	<Content Include="..\Samples\minimal.jsonocel">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</Content>
-	<Content Include="..\Samples\minimal.xmlocel">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</Content>
-	<Content Include="..\Samples\minimal.db">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</Content>
-    <Content Include="..\Samples\github_pm4py.jsonocel">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\Samples\github_pm4py.xmlocel">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\Samples\github_pm4py.db">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\Samples\blazor-logs.jsonocel">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-	<Content Include="..\Samples\recruiting.jsonocel">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</Content>
-	<Content Include="..\Samples\windows_events.jsonocel">
-	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	</Content>
-  </ItemGroup>
-
-  <ItemGroup>
+	<ItemGroup>
     <ProjectReference Include="..\pm4net\pm4net.fsproj" />
   </ItemGroup>
 
