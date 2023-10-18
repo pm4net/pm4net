@@ -1,4 +1,4 @@
-module GraphLayout
+namespace pm4net.Types.GraphLayout
 
 open pm4net.Types
 
