@@ -31,7 +31,7 @@ module VisualizationPipelineTests =
             ]) |> Some
     }
 
-    let dataPath = @"..\..\..\..\..\..\data\OCEL\"
+    let dataPath = @"..\..\..\..\..\..\data\pm4net\"
 
     module Dot =
 
