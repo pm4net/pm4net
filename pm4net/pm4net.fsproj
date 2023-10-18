@@ -25,6 +25,7 @@
     <Compile Include="Types\DirectlyFollowsGraph.fs" />
     <Compile Include="Types\Graphs.fs" />
     <Compile Include="Types\Input.fs" />
+    <Compile Include="Types\GraphLayout.fs" />
     <Compile Include="Utilities\Helpers.fs" />
     <Compile Include="Utilities\OcelHelpers.fs" />
     <Compile Include="Visualization\Ocel\Msagl.fs" />
