@@ -19,7 +19,7 @@ module OcelDfgTests =
         IncludedNamespaces = None
     }
 
-    let dataPath = @"..\..\..\..\..\..\data\pm4net\"
+    let dataPath = Path.Combine("..", "..", "..", "..", "..", "..", "data", "pm4net") |> Path.GetFullPath
 
     let timeframeFilter = {
         filter with
